@@ -300,6 +300,7 @@ def show_cargas_page():
             'driver_name': 'Caminhoneiro',
             'grain_name': 'Grão',
             'contract_type': 'Tipo Contrato',
+            'status': 'Status',
             'amount': 'Sacas',
             'revenue_value': 'Receita',
             'cost_value': 'Custo',
