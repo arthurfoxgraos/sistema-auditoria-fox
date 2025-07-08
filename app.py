@@ -216,18 +216,49 @@ def show_cargas_page():
     st.subheader(f"📊 Resultados: {len(df_filtered)} cargas")
     
     if not df_filtered.empty:
-        # Selecionar colunas para exibição
+        # Selecionar colunas específicas solicitadas
         display_columns = []
-        for col in ['ticket', 'status', 'loadingDate', 'amount', 'freightValue', 'seller_name', 'buyer_name']:
+        column_mapping = {
+            'ticket': 'Nro Ticket',
+            'loadingDate': 'Data de Carregamento', 
+            'buyer_name': 'Comprador',
+            'seller_name': 'Vendedor',
+            'driver_name': 'Caminhoneiro',
+            'amount': 'Sacas'
+        }
+        
+        # Verificar quais colunas existem e adicionar
+        for col, display_name in column_mapping.items():
             if col in df_filtered.columns:
                 display_columns.append(col)
         
+        # Se temos transaction_amount mas não amount, usar transaction_amount como Sacas
+        if 'amount' not in df_filtered.columns and 'transaction_amount' in df_filtered.columns:
+            df_filtered['amount'] = df_filtered['transaction_amount']
+            if 'amount' not in display_columns:
+                display_columns.append('amount')
+        
         if display_columns:
+            # Renomear colunas para exibição
+            df_display = df_filtered[display_columns].copy()
+            df_display.columns = [column_mapping.get(col, col) for col in display_columns]
+            
+            # Formatar data se existir
+            if 'Data de Carregamento' in df_display.columns:
+                df_display['Data de Carregamento'] = pd.to_datetime(
+                    df_display['Data de Carregamento']
+                ).dt.strftime('%d/%m/%Y')
+            
+            # Formatar sacas se existir
+            if 'Sacas' in df_display.columns:
+                df_display['Sacas'] = df_display['Sacas'].fillna(0).round(0).astype(int)
+            
             st.dataframe(
-                df_filtered[display_columns],
+                df_display,
                 use_container_width=True
             )
         else:
+            st.warning("Colunas solicitadas não encontradas nos dados.")
             st.dataframe(df_filtered, use_container_width=True)
         
         # Gráficos
