@@ -63,7 +63,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-@st.cache_data
+@st.cache_data(ttl=60)  # Cache por apenas 1 minuto para debug
 def load_cargas_data():
     """Carrega dados de cargas com cache"""
     try:
