@@ -21,6 +21,14 @@ class DatabaseService:
     def get_tickets_with_users(self, limit: int = 100) -> List[Dict]:
         """Busca tickets com lookup de users para seller, buyer e driver"""
         pipeline = [
+            # Filtrar apenas cargas a partir de 2025
+            {
+                "$match": {
+                    "loadingDate": {
+                        "$gte": datetime(2025, 1, 1)
+                    }
+                }
+            },
             # Lookup com orderv2 para destinationOrder
             {
                 "$lookup": {

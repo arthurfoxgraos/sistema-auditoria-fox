@@ -164,7 +164,7 @@ def show_cargas_page():
     
     # Filtros
     st.subheader("🔍 Filtros")
-    col1, col2, col3 = st.columns(3)
+    col1, col2 = st.columns(2)
     
     with col1:
         if 'status' in df_tickets.columns:
@@ -174,17 +174,6 @@ def show_cargas_page():
             status_filter = "Todos"
     
     with col2:
-        if 'loadingDate' in df_tickets.columns:
-            # Usar uma data mais antiga como padrão para mostrar mais dados
-            default_date = datetime.now() - timedelta(days=365)  # 1 ano atrás
-            date_filter = st.date_input(
-                "Data de carregamento (a partir de):",
-                value=default_date
-            )
-        else:
-            date_filter = None
-    
-    with col3:
         if 'seller_name' in df_tickets.columns or 'buyer_name' in df_tickets.columns:
             user_filter = st.text_input("Filtrar por vendedor/comprador:")
         else:
@@ -195,14 +184,6 @@ def show_cargas_page():
     
     if status_filter != "Todos" and 'status' in df_filtered.columns:
         df_filtered = df_filtered[df_filtered['status'] == status_filter]
-    
-    if date_filter and 'loadingDate' in df_filtered.columns:
-        # Converter loadingDate para datetime se necessário
-        df_filtered['loadingDate'] = pd.to_datetime(df_filtered['loadingDate'], errors='coerce')
-        # Filtrar por data
-        df_filtered = df_filtered[
-            df_filtered['loadingDate'].dt.date >= date_filter
-        ]
     
     if user_filter:
         if 'seller_name' in df_filtered.columns:
@@ -218,7 +199,7 @@ def show_cargas_page():
         df_filtered = df_filtered[mask1 | mask2]
     
     # Mostrar resultados
-    st.subheader(f"📊 Resultados: {len(df_filtered)} cargas")
+    st.subheader(f"📊 Resultados: {len(df_filtered)} cargas (apenas 2025+)")
     
     if not df_filtered.empty:
         # Selecionar colunas específicas solicitadas
