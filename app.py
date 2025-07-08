@@ -211,6 +211,7 @@ def show_cargas_page():
             'seller_name': 'Vendedor',
             'driver_name': 'Caminhoneiro',
             'grain_name': 'Grão',
+            'contract_type': 'Tipo Contrato',
             'amount': 'Sacas'
         }
         

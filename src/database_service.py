@@ -105,6 +105,22 @@ class DatabaseService:
                         ]
                     },
                     "grain_name": {"$arrayElemAt": ["$grain_info.name", 0]},
+                    # Determinar tipo de contrato baseado no originOrder
+                    "contract_type": {
+                        "$cond": {
+                            "if": {"$eq": [{"$arrayElemAt": ["$origin_order_info.isGrain", 0]}, True]},
+                            "then": "🌾 Grão",
+                            "else": {
+                                "$cond": {
+                                    "if": {"$eq": [{"$arrayElemAt": ["$origin_order_info.isFreight", 0]}, True]},
+                                    "then": "🚛 Frete",
+                                    "else": "❓ Indefinido"
+                                }
+                            }
+                        }
+                    },
+                    "is_grain_contract": {"$arrayElemAt": ["$origin_order_info.isGrain", 0]},
+                    "is_freight_contract": {"$arrayElemAt": ["$origin_order_info.isFreight", 0]},
                     # Extrair amount do array transactions
                     "amount": {"$sum": "$transactions.amount"},
                     "transaction_distance": {"$avg": "$transactions.distanceInKm"},
