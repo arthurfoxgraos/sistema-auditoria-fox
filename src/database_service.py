@@ -74,15 +74,6 @@ class DatabaseService:
                     "as": "driver_info"
                 }
             },
-            # Lookup com ticketv2_transactions
-            {
-                "$lookup": {
-                    "from": "ticketv2_transactions",
-                    "localField": "_id",
-                    "foreignField": "ticket",
-                    "as": "transactions"
-                }
-            },
             # Adicionar campos calculados
             {
                 "$addFields": {
@@ -104,9 +95,10 @@ class DatabaseService:
                             "$driverName"
                         ]
                     },
-                    "transaction_amount": {"$sum": "$transactions.amount"},
+                    # Extrair amount do array transactions
+                    "amount": {"$sum": "$transactions.amount"},
                     "transaction_distance": {"$avg": "$transactions.distanceInKm"},
-                    "transaction_value": {"$sum": "$transactions.value"}
+                    "transaction_value": {"$sum": "$transactions.valueGrainReceive"}
                 }
             },
             {"$sort": {"ticket": -1}},
