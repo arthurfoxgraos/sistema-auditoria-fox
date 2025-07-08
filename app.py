@@ -331,18 +331,18 @@ def show_cargas_page():
                     df_display['Data de Carregamento'], errors='coerce'
                 ).dt.strftime('%d/%m/%Y')
             
-            # Formatar valores monetários
-            monetary_columns = ['revenue_value', 'cost_value', 'total_freight_value', 'gross_profit']
+            # Formatar valores monetários no padrão brasileiro
+            monetary_columns = ['Receita', 'Custo', 'Frete', 'Lucro Bruto']
             
             for col in monetary_columns:
                 if col in df_display.columns:
                     df_display[col] = df_display[col].apply(
-                        lambda x: f"R$ {x:.2f}" if pd.notnull(x) and x != 0 else "R$ 0,00"
+                        lambda x: f"R$ {x:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.') if pd.notnull(x) and x != 0 else "R$ 0,00"
                     )
             
             # Formatar sacas como número inteiro
-            if 'amount' in df_display.columns:
-                df_display['amount'] = df_display['amount'].apply(
+            if 'Sacas' in df_display.columns:
+                df_display['Sacas'] = df_display['Sacas'].apply(
                     lambda x: f"{int(x)}" if pd.notnull(x) and x != 0 else "0"
                 )
             

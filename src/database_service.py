@@ -17,18 +17,16 @@ class DatabaseService:
         self.orderv2 = collections['orderv2']
         self.users = collections['users']
         self.provisionings = collections['provisionings']
-    
+        self.grains = collections.get('grains')
+        
     def get_tickets_with_users(self, limit: int = 100) -> List[Dict]:
         """Busca tickets com lookup de users para seller, buyer e driver"""
         pipeline = [
-            # Filtrar apenas cargas a partir de 2025
-            {
-                "$match": {
-                    "loadingDate": {
-                        "$gte": datetime(2025, 1, 1)
-                    }
-                }
-            },
+            # Filtrar apenas cargas de 2025+ e excluir cancelados
+            {"$match": {
+                "loadingDate": {"$gte": datetime(2025, 1, 1)},
+                "status": {"$ne": "Cancelado"}
+            }},
             # Lookup com orderv2 para destinationOrder
             {
                 "$lookup": {
