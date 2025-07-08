@@ -269,7 +269,7 @@ def show_provisionamento_page():
                         color='taxa_utilizacao',
                         color_continuous_scale='RdYlGn'
                     )
-                    fig.update_xaxis(tickangle=45)
+                    fig.update_layout(xaxis_tickangle=45)
                     st.plotly_chart(fig, use_container_width=True)
             
             with col2:
