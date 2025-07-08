@@ -100,7 +100,8 @@ def main():
         "Selecione uma página:",
         [
             "🚚 Cargas",
-            "📦 Provisionamento"
+            "📦 Provisionamento",
+            "💰 Financeiro"
         ]
     )
     
@@ -109,6 +110,9 @@ def main():
         show_cargas_page()
     elif page == "📦 Provisionamento":
         show_provisionamento_page()
+    elif page == "💰 Financeiro":
+        from pages.financeiro import show_financeiro_page
+        show_financeiro_page()
 
 def show_cargas_page():
     """Mostra página de cargas"""

@@ -18,6 +18,8 @@ class DatabaseService:
         self.users = collections['users']
         self.provisionings = collections['provisionings']
         self.grains = collections.get('grains')
+        self.finances = collections.get('finances')
+        self.finances_categories = collections.get('finances_categories')
         
     def get_tickets_with_users(self, limit: int = 100) -> List[Dict]:
         """Busca tickets com lookup de users para seller, buyer e driver"""
@@ -317,5 +319,57 @@ class DatabaseService:
             
         except Exception as e:
             print(f"Erro ao buscar transações: {e}")
+            return []
+
+
+    def get_finances_with_lookups(self, limit: int = 100) -> List[Dict]:
+        """Busca dados financeiros com lookup de categories e users"""
+        if not self.finances:
+            print("Coleção finances não disponível")
+            return []
+            
+        pipeline = [
+            # Lookup com finances_categories
+            {
+                "$lookup": {
+                    "from": "finances_categories",
+                    "localField": "category",
+                    "foreignField": "_id",
+                    "as": "category_info"
+                }
+            },
+            # Lookup com users
+            {
+                "$lookup": {
+                    "from": "users",
+                    "localField": "userVinculated",
+                    "foreignField": "_id",
+                    "as": "user_info"
+                }
+            },
+            # Adicionar campos calculados
+            {
+                "$addFields": {
+                    "category_name": {"$arrayElemAt": ["$category_info.category", 0]},
+                    "category_item": {"$arrayElemAt": ["$category_info.item", 0]},
+                    "category_type": {"$arrayElemAt": ["$category_info.type", 0]},
+                    "category_dfc": {"$arrayElemAt": ["$category_info.dfc", 0]},
+                    "user_name": {
+                        "$ifNull": [
+                            {"$arrayElemAt": ["$user_info.name", 0]},
+                            {"$arrayElemAt": ["$user_info.companyName", 0]}
+                        ]
+                    }
+                }
+            },
+            {"$sort": {"date": -1}},
+            {"$limit": limit}
+        ]
+        
+        try:
+            results = list(self.finances.aggregate(pipeline))
+            return results
+        except Exception as e:
+            print(f"Erro ao buscar dados financeiros: {e}")
             return []
 

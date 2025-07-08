@@ -44,7 +44,10 @@ class DatabaseConfig:
             'ticketv2_transactions': self.db['ticketv2_transactions'],
             'orderv2': self.db['orderv2'],
             'users': self.db['users'],
-            'provisionings': self.db['provisionings']
+            'provisionings': self.db['provisionings'],
+            'grains': self.db['grains'],
+            'finances': self.db['finances'],
+            'finances_categories': self.db['finances_categories']
         }
         
         return collections
