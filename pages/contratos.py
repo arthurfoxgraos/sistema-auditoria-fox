@@ -93,27 +93,33 @@ def show_contratos_page():
 
     # Aplicar filtros
     df_f = df.copy()
-    if grain_opt != "Todos": df_f = df_f[df_f['grain_name']==grain_opt]
-    if type_opt != "Todos": df_f = df_f[df_f['contract_type']==type_opt]
-    if dir_opt != "Todos": df_f = df_f[df_f['direction_type']==dir_opt]
+    if grain_opt != "Todos": df_f = df_f[df_f['grain_name'] == grain_opt]
+    if type_opt != "Todos": df_f = df_f[df_f['contract_type'] == type_opt]
+    if dir_opt != "Todos": df_f = df_f[df_f['direction_type'] == dir_opt]
     if cli_search:
         df_f = df_f[df_f['cliente'].str.contains(cli_search, case=False, na=False)]
     if status_opt:
         df_f = df_f[df_f['status_display'].isin(status_opt)]
-    if isinstance(date_range, list) and len(date_range)==2:
+    if isinstance(date_range, list) and len(date_range) == 2:
         start, end = date_range
-        df_f = df_f[(df_f['createdAt'].dt.date>=start)&(df_f['createdAt'].dt.date<=end)]
+        df_f = df_f[(df_f['createdAt'].dt.date >= start) & (df_f['createdAt'].dt.date <= end)]
 
     # Entregue e percentual
     if 'amountOrdered' in df_f.columns:
-        df_f['Entregue'] = df_f['amountOrdered'].fillna(0)
-        df_f['% Entregue'] = (df_f['Entregue']/df_f['amount']*100).fillna(0).round(2)
+        df_f['Entregue'] = pd.to_numeric(df_f['amountOrdered'], errors='coerce').fillna(0)
+        df_f['% Entregue'] = (df_f['Entregue'] / df_f['amount'] * 100).fillna(0).round(2)
     else:
         df_f['Entregue'] = 0
         df_f['% Entregue'] = 0
 
     # Atualizar status para '🔄 Em Progresso' se houver entrega e não concluído
     df_f.loc[(df_f['Entregue'] > 0) & (df_f['status_display'] != '✅ Concluído'), 'status_display'] = '🔄 Em Progresso'
+
+    # Cálculo do prazo de pagamento em dias
+    if 'paymentDaysAfterDelivery' in df_f.columns:
+        df_f['Prazo Pagamento (dias)'] = pd.to_numeric(df_f['paymentDaysAfterDelivery'], errors='coerce').fillna(0).astype(int)
+    else:
+        df_f['Prazo Pagamento (dias)'] = 0
 
     # Totalizadores
     df_f['total'] = df_f['amount'] * df_f['bagPrice']
@@ -125,31 +131,36 @@ def show_contratos_page():
     # Exibir tabela
     st.subheader(f"📊 {len(df_f)} contratos")
     col_map = {
-        '_id':'ID','createdAt':'Data Criação','cliente':'Cliente','grain_name':'Grão',
-        'contract_type':'Tipo','direction_type':'Fluxo','amount':'Quantidade',
-        'Entregue':'Entregue','% Entregue':'% Entregue','bagPrice':'Preço/Saca',
-        'total':'Total','deliveryDeadline':'Prazo Entrega','status_display':'Status'
+        '_id': 'ID', 'createdAt': 'Data Criação', 'cliente': 'Cliente', 'grain_name': 'Grão',
+        'contract_type': 'Tipo', 'direction_type': 'Fluxo', 'amount': 'Quantidade',
+        'Entregue': 'Entregue', '% Entregue': '% Entregue', 'Prazo Pagamento (dias)': 'Prazo Pagamento (dias)',
+        'bagPrice': 'Preço/Saca', 'total': 'Total', 'deliveryDeadline': 'Prazo Entrega', 'status_display': 'Status'
     }
     disp = [k for k in col_map if k in df_f]
     df_disp = df_f[disp].copy()
     df_disp.columns = [col_map[k] for k in disp]
-    # Formata
+
+    # Formatação
     if 'Data Criação' in df_disp:
         df_disp['Data Criação'] = df_disp['Data Criação'].dt.strftime('%d/%m/%Y')
     if 'Prazo Entrega' in df_disp:
         df_disp['Prazo Entrega'] = pd.to_datetime(df_disp['Prazo Entrega'], errors='coerce').dt.strftime('%d/%m/%Y')
     if 'Preço/Saca' in df_disp:
-        df_disp['Preço/Saca'] = df_disp['Preço/Saca'].apply(lambda x: f"R$ {x:,.2f}".replace(',', 'X').replace('.', ',').replace('X','.'))
-    if 'Quantidade' in df_disp:
-        df_disp['Quantidade'] = df_disp['Quantidade'].apply(lambda x: f"{int(x):,}".replace(',', '.'))
-    if 'Entregue' in df_disp:
-        df_disp['Entregue'] = df_disp['Entregue'].apply(lambda x: f"{int(x):,}".replace(',', '.'))
+        df_disp['Preço/Saca'] = df_disp['Preço/Saca'].apply(
+            lambda x: f"R$ {x:,.2f}".replace(',', 'X').replace('.', ',').replace('X','.')
+        )
+    for col in ['Quantidade', 'Entregue', 'Prazo Pagamento (dias)']:
+        if col in df_disp:
+            df_disp[col] = df_disp[col].astype(int).apply(lambda x: f"{x:,}".replace(',', '.'))
     if '% Entregue' in df_disp:
         df_disp['% Entregue'] = df_disp['% Entregue'].apply(lambda x: f"{x:.2f}%")
     if 'Total' in df_disp:
-        df_disp['Total'] = df_disp['Total'].apply(lambda x: f"R$ {x:,.2f}".replace(',', 'X').replace('.', ',').replace('X','.'))
+        df_disp['Total'] = df_disp['Total'].apply(
+            lambda x: f"R$ {x:,.2f}".replace(',', 'X').replace('.', ',').replace('X','.')
+        )
 
     st.dataframe(df_disp, use_container_width=True, height=600)
+
 
 if __name__ == "__main__":
     show_contratos_page()
