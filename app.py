@@ -178,14 +178,14 @@ def show_cargas_page():
         # Filtro por intervalo de datas
         if 'loadingDate' in df_tickets.columns:
             df_tickets['loadingDate'] = pd.to_datetime(df_tickets['loadingDate'], errors='coerce')
-            min_date = df_tickets['loadingDate'].min().date() if not df_tickets['loadingDate'].isna().all() else datetime.date(2025, 1, 1)
-            max_date = df_tickets['loadingDate'].max().date() if not df_tickets['loadingDate'].isna().all() else datetime.date.today()
+            
+            # Definir padrão de 30 dias
+            end_date = datetime.date.today()
+            start_date = end_date - datetime.timedelta(days=30)
             
             date_range = st.date_input(
                 "Intervalo de datas:",
-                value=(min_date, max_date),
-                min_value=min_date,
-                max_value=max_date,
+                value=(start_date, end_date),
                 key="date_range_filter"
             )
         else:
@@ -312,11 +312,6 @@ def show_cargas_page():
         for col, display_name in column_mapping.items():
             if col in df_filtered.columns:
                 display_columns.append(col)
-        
-        # Adicionar coluna de conformidade se existir
-        if 'compliance_status' in df_filtered.columns:
-            display_columns.append('compliance_status')
-            column_mapping['compliance_status'] = 'Status'
         
         # Se temos transaction_amount mas não amount, usar transaction_amount como Sacas
         if 'amount' not in df_filtered.columns and 'transaction_amount' in df_filtered.columns:
