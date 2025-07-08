@@ -213,10 +213,10 @@ def show_cargas_page():
             'grain_name': 'Grão',
             'contract_type': 'Tipo Contrato',
             'amount': 'Sacas',
-            'freight_value_per_bag': 'Frete/Sc',
-            'total_freight_value': 'Valor Total Frete',
-            'revenue_value': 'Valor Receita',
-            'cost_value': 'Valor Custo'
+            'revenue_value': 'Receita',
+            'cost_value': 'Custo',
+            'total_freight_value': 'Frete',
+            'gross_profit': 'Lucro Bruto'
         }
         
         # Verificar quais colunas existem e adicionar
@@ -248,25 +248,13 @@ def show_cargas_page():
                 ).dt.strftime('%d/%m/%Y')
             
             # Formatar valores monetários
-            if 'freight_value_per_bag' in df_display.columns:
-                df_display['freight_value_per_bag'] = df_display['freight_value_per_bag'].apply(
-                    lambda x: f"R$ {x:.2f}" if pd.notnull(x) and x != 0 else "R$ 0,00"
-                )
+            monetary_columns = ['revenue_value', 'cost_value', 'total_freight_value', 'gross_profit']
             
-            if 'total_freight_value' in df_display.columns:
-                df_display['total_freight_value'] = df_display['total_freight_value'].apply(
-                    lambda x: f"R$ {x:.2f}" if pd.notnull(x) and x != 0 else "R$ 0,00"
-                )
-            
-            if 'revenue_value' in df_display.columns:
-                df_display['revenue_value'] = df_display['revenue_value'].apply(
-                    lambda x: f"R$ {x:.2f}" if pd.notnull(x) and x != 0 else "R$ 0,00"
-                )
-            
-            if 'cost_value' in df_display.columns:
-                df_display['cost_value'] = df_display['cost_value'].apply(
-                    lambda x: f"R$ {x:.2f}" if pd.notnull(x) and x != 0 else "R$ 0,00"
-                )
+            for col in monetary_columns:
+                if col in df_display.columns:
+                    df_display[col] = df_display[col].apply(
+                        lambda x: f"R$ {x:.2f}" if pd.notnull(x) and x != 0 else "R$ 0,00"
+                    )
             
             # Formatar sacas como número inteiro
             if 'amount' in df_display.columns:

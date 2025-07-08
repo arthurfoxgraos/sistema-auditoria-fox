@@ -146,6 +146,25 @@ class DatabaseService:
                     },
                     "destination_bag_price": {"$arrayElemAt": ["$destination_order_info.bagPrice", 0]},
                     "origin_bag_price": {"$arrayElemAt": ["$origin_order_info.bagPrice", 0]},
+                    # Lucro bruto = Receita - Custo - Frete
+                    "gross_profit": {
+                        "$subtract": [
+                            {"$subtract": [
+                                {"$multiply": [
+                                    {"$ifNull": [{"$arrayElemAt": ["$destination_order_info.bagPrice", 0]}, 0]},
+                                    {"$sum": "$transactions.amount"}
+                                ]},
+                                {"$multiply": [
+                                    {"$ifNull": [{"$arrayElemAt": ["$origin_order_info.bagPrice", 0]}, 0]},
+                                    {"$sum": "$transactions.amount"}
+                                ]}
+                            ]},
+                            {"$multiply": [
+                                {"$ifNull": ["$freightValue", 0]},
+                                {"$sum": "$transactions.amount"}
+                            ]}
+                        ]
+                    },
                     "transaction_distance": {"$avg": "$transactions.distanceInKm"},
                     "transaction_value": {"$sum": "$transactions.valueGrainReceive"}
                 }
