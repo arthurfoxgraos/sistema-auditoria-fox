@@ -293,6 +293,7 @@ def show_cargas_page():
         # Selecionar colunas específicas solicitadas
         display_columns = []
         column_mapping = {
+            'paid_status': 'Pago',
             'ticket': 'Nro Ticket',
             'loadingDate': 'Data de Carregamento', 
             'buyer_name': 'Comprador',

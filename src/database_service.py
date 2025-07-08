@@ -103,6 +103,14 @@ class DatabaseService:
                         ]
                     },
                     "grain_name": {"$arrayElemAt": ["$grain_info.name", 0]},
+                    # Status de pagamento
+                    "paid_status": {
+                        "$cond": {
+                            "if": {"$eq": ["$paid", True]},
+                            "then": "✅",
+                            "else": "⏰"
+                        }
+                    },
                     # Determinar tipo de contrato baseado no originOrder
                     "contract_type": {
                         "$cond": {
