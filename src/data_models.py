@@ -66,6 +66,54 @@ class Operation:
     quantidade_total_sacas: float
     valor_total_frete: float
     valor_total_grao: float
+    
+    @classmethod
+    def from_tickets_and_orders(cls, tickets: List['Ticket'], orders: List['Order']) -> 'Operation':
+        """Cria operação a partir de tickets e pedidos"""
+        if not tickets:
+            raise ValueError("Lista de tickets não pode estar vazia")
+        
+        # Calcular métricas
+        ticket_ids = [t._id for t in tickets]
+        num_tickets = len(tickets)
+        
+        # Quantidade total de sacas
+        quantidade_total = sum(t.amount for t in tickets if t.amount) or 0
+        
+        # Valor total de frete
+        valor_frete = sum(t.freightValue for t in tickets if t.freightValue) or 0
+        
+        # Valor total de grão
+        valor_grao = sum(t.valueGrain for t in tickets if t.valueGrain) or 0
+        
+        # Datas
+        datas_carregamento = [t.loadingDate for t in tickets if t.loadingDate]
+        data_inicio = min(datas_carregamento) if datas_carregamento else datetime.now()
+        data_fim = max(datas_carregamento) if datas_carregamento else None
+        
+        # Status baseado nos tickets
+        status_counts = {}
+        for ticket in tickets:
+            status = ticket.status or "Sem status"
+            status_counts[status] = status_counts.get(status, 0) + 1
+        
+        # Status predominante
+        status = max(status_counts.items(), key=lambda x: x[1])[0] if status_counts else "Indefinido"
+        
+        return cls(
+            _id=f"op_{tickets[0]._id[:8]}",
+            tickets=ticket_ids,
+            status=status,
+            data_inicio=data_inicio,
+            data_fim=data_fim,
+            num_tickets=num_tickets,
+            quantidade_total_sacas=quantidade_total,
+            valor_total_frete=valor_frete,
+            valor_total_grao=valor_grao
+        )
+
+# Alias para compatibilidade
+Operacao = Operation
 
 class DataProcessor:
     """Processador de dados para conversões e análises"""

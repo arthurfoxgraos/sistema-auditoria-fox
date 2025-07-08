@@ -6,7 +6,10 @@ from datetime import datetime, timedelta
 import pandas as pd
 from dataclasses import dataclass
 
-from .data_models import Ticket, TicketTransaction, Order, Operacao, DataProcessor
+from .data_models import Ticket, TicketTransaction, Order, Operation, DataProcessor
+
+# Alias para compatibilidade
+Operacao = Operation
 
 @dataclass
 class AuditResult:
