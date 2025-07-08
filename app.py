@@ -202,6 +202,48 @@ def show_cargas_page():
     st.subheader(f"📊 Resultados: {len(df_filtered)} cargas (apenas 2025+)")
     
     if not df_filtered.empty:
+        # Calcular totalizadores
+        total_revenue = df_filtered['revenue_value'].sum() if 'revenue_value' in df_filtered.columns else 0
+        total_cost = df_filtered['cost_value'].sum() if 'cost_value' in df_filtered.columns else 0
+        total_freight = df_filtered['total_freight_value'].sum() if 'total_freight_value' in df_filtered.columns else 0
+        total_gross_profit = df_filtered['gross_profit'].sum() if 'gross_profit' in df_filtered.columns else 0
+        total_bags = df_filtered['amount'].sum() if 'amount' in df_filtered.columns else 0
+        
+        # Exibir totalizadores em métricas
+        col1, col2, col3, col4, col5 = st.columns(5)
+        
+        with col1:
+            st.metric(
+                label="💰 Receita Total",
+                value=f"R$ {total_revenue:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+            )
+        
+        with col2:
+            st.metric(
+                label="💸 Custo Total", 
+                value=f"R$ {total_cost:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+            )
+        
+        with col3:
+            st.metric(
+                label="🚛 Frete Total",
+                value=f"R$ {total_freight:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+            )
+        
+        with col4:
+            st.metric(
+                label="📈 Lucro Bruto Total",
+                value=f"R$ {total_gross_profit:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'),
+                delta=f"{((total_gross_profit / total_revenue * 100) if total_revenue > 0 else 0):.1f}%" if total_revenue > 0 else None
+            )
+        
+        with col5:
+            st.metric(
+                label="📦 Total Sacas",
+                value=f"{total_bags:,.0f}".replace(',', '.')
+            )
+        
+        st.divider()
         # Selecionar colunas específicas solicitadas
         display_columns = []
         column_mapping = {
