@@ -1,88 +1,27 @@
 """
-Serviço de acesso ao banco de dados MongoDB para auditoria FOX
-Baseado na estrutura real das coleções
+Serviço de acesso ao banco de dados com lookup de users
 """
-from typing import List, Dict, Any, Optional
-from datetime import datetime, timedelta
+from typing import List, Dict, Any
 import pandas as pd
-from pymongo.collection import Collection
-from pymongo import ASCENDING, DESCENDING
+from datetime import datetime, timedelta
+from bson import ObjectId
 
-from .data_models import Ticket, TicketTransaction, Order, Operacao
+from .data_models import Ticket, TicketTransaction, Order
 
 class DatabaseService:
-    """Serviço para operações no banco de dados"""
+    """Serviço para acesso aos dados do MongoDB"""
     
-    def __init__(self, collections: Dict[str, Collection]):
+    def __init__(self, collections):
         self.ticketv2 = collections['ticketv2']
         self.ticketv2_transactions = collections['ticketv2_transactions']
         self.orderv2 = collections['orderv2']
+        self.users = collections['users']
+        self.provisionings = collections['provisionings']
     
-    def get_tickets(self, limit: int = 1000, filters: Dict = None) -> List[Ticket]:
-        """Busca tickets da coleção ticketv2"""
-        query = filters or {}
-        
-        tickets = []
-        for doc in self.ticketv2.find(query).limit(limit).sort("loadingDate", DESCENDING):
-            try:
-                ticket = Ticket.from_mongo(doc)
-                tickets.append(ticket)
-            except Exception as e:
-                print(f"Erro ao processar ticket {doc.get('_id')}: {e}")
-                continue
-        
-        return tickets
-    
-    def get_ticket_transactions(self, limit: int = 1000, filters: Dict = None) -> List[TicketTransaction]:
-        """Busca transações da coleção ticketv2_transactions"""
-        query = filters or {}
-        
-        transactions = []
-        for doc in self.ticketv2_transactions.find(query).limit(limit):
-            try:
-                transaction = TicketTransaction.from_mongo(doc)
-                transactions.append(transaction)
-            except Exception as e:
-                print(f"Erro ao processar transação {doc.get('_id')}: {e}")
-                continue
-        
-        return transactions
-    
-    def get_orders(self, limit: int = 1000, filters: Dict = None) -> List[Order]:
-        """Busca pedidos da coleção orderv2"""
-        query = filters or {}
-        
-        orders = []
-        for doc in self.orderv2.find(query).limit(limit).sort("createdAt", DESCENDING):
-            try:
-                order = Order.from_mongo(doc)
-                orders.append(order)
-            except Exception as e:
-                print(f"Erro ao processar pedido {doc.get('_id')}: {e}")
-                continue
-        
-        return orders
-    
-    def get_tickets_by_date_range(self, start_date: datetime, end_date: datetime) -> List[Ticket]:
-        """Busca tickets por período de data de carregamento"""
-        filters = {
-            "loadingDate": {
-                "$gte": start_date,
-                "$lte": end_date
-            }
-        }
-        
-        return self.get_tickets(filters=filters)
-    
-    def get_tickets_by_status(self, status: str) -> List[Ticket]:
-        """Busca tickets por status específico"""
-        filters = {"status": status}
-        return self.get_tickets(filters=filters)
-    
-    def get_tickets_with_orders(self) -> List[Dict[str, Any]]:
-        """Busca tickets com informações dos pedidos relacionados (lookup)"""
+    def get_tickets_with_users(self, limit: int = 100) -> List[Dict]:
+        """Busca tickets com lookup de users para seller e buyer"""
         pipeline = [
-            # Lookup para destinationOrder
+            # Lookup com orderv2 para destinationOrder
             {
                 "$lookup": {
                     "from": "orderv2",
@@ -91,195 +30,232 @@ class DatabaseService:
                     "as": "destination_order_info"
                 }
             },
-            # Lookup para originOrder
+            # Lookup com orderv2 para originOrder
             {
                 "$lookup": {
                     "from": "orderv2",
-                    "localField": "originOrder",
+                    "localField": "originOrder", 
                     "foreignField": "_id",
                     "as": "origin_order_info"
                 }
             },
-            # Limitar resultados
-            {"$limit": 1000},
-            # Ordenar por data de carregamento
-            {"$sort": {"loadingDate": DESCENDING}}
-        ]
-        
-        results = []
-        for doc in self.ticketv2.aggregate(pipeline):
-            try:
-                # Processar ticket
-                ticket = Ticket.from_mongo(doc)
-                
-                # Processar pedidos relacionados
-                destination_orders = []
-                origin_orders = []
-                
-                for order_doc in doc.get('destination_order_info', []):
-                    destination_orders.append(Order.from_mongo(order_doc))
-                
-                for order_doc in doc.get('origin_order_info', []):
-                    origin_orders.append(Order.from_mongo(order_doc))
-                
-                results.append({
-                    'ticket': ticket,
-                    'destination_orders': destination_orders,
-                    'origin_orders': origin_orders
-                })
-                
-            except Exception as e:
-                print(f"Erro ao processar ticket com lookup {doc.get('_id')}: {e}")
-                continue
-        
-        return results
-    
-    def get_orders_summary(self) -> Dict[str, Any]:
-        """Retorna resumo dos pedidos (orderv2)"""
-        total_orders = self.orderv2.count_documents({})
-        
-        # Agregação para estatísticas
-        pipeline = [
+            # Lookup com users para buyer (via destination order)
             {
-                "$group": {
-                    "_id": None,
-                    "total_amount": {"$sum": "$amount"},
-                    "media_amount": {"$avg": "$amount"},
-                    "total_bag_price": {"$sum": "$bagPrice"},
-                    "media_bag_price": {"$avg": "$bagPrice"},
-                    "count": {"$sum": 1},
-                    "done_count": {
-                        "$sum": {
-                            "$cond": [{"$eq": ["$isDone", True]}, 1, 0]
-                        }
+                "$lookup": {
+                    "from": "users",
+                    "localField": "destination_order_info.buyer",
+                    "foreignField": "_id",
+                    "as": "buyer_info"
+                }
+            },
+            # Lookup com users para seller (via origin order)
+            {
+                "$lookup": {
+                    "from": "users",
+                    "localField": "origin_order_info.seller",
+                    "foreignField": "_id", 
+                    "as": "seller_info"
+                }
+            },
+            # Lookup com transações
+            {
+                "$lookup": {
+                    "from": "ticketv2_transactions",
+                    "localField": "_id",
+                    "foreignField": "ticket",
+                    "as": "transactions"
+                }
+            },
+            # Adicionar campos calculados
+            {
+                "$addFields": {
+                    "buyer_name": {
+                        "$ifNull": [
+                            {"$arrayElemAt": ["$buyer_info.name", 0]},
+                            {"$arrayElemAt": ["$buyer_info.companyName", 0]}
+                        ]
                     },
-                    "canceled_count": {
-                        "$sum": {
-                            "$cond": [{"$eq": ["$isCanceled", True]}, 1, 0]
-                        }
+                    "seller_name": {
+                        "$ifNull": [
+                            {"$arrayElemAt": ["$seller_info.name", 0]},
+                            {"$arrayElemAt": ["$seller_info.companyName", 0]}
+                        ]
+                    },
+                    "transaction_amount": {
+                        "$sum": "$transactions.amount"
+                    },
+                    "transaction_distance": {
+                        "$avg": "$transactions.distanceInKm"
+                    },
+                    "transaction_value": {
+                        "$sum": "$transactions.value"
                     }
                 }
-            }
+            },
+            {"$limit": limit}
         ]
         
-        stats = list(self.orderv2.aggregate(pipeline))
-        
-        if stats:
-            stat = stats[0]
-            return {
-                "total_orders": total_orders,
-                "total_amount": stat.get("total_amount", 0),
-                "media_amount": stat.get("media_amount", 0),
-                "total_bag_price": stat.get("total_bag_price", 0),
-                "media_bag_price": stat.get("media_bag_price", 0),
-                "done_count": stat.get("done_count", 0),
-                "canceled_count": stat.get("canceled_count", 0),
-                "done_rate": stat.get("done_count", 0) / total_orders if total_orders > 0 else 0
-            }
-        else:
-            return {
-                "total_orders": total_orders,
-                "total_amount": 0,
-                "media_amount": 0,
-                "total_bag_price": 0,
-                "media_bag_price": 0,
-                "done_count": 0,
-                "canceled_count": 0,
-                "done_rate": 0
-            }
+        try:
+            results = list(self.ticketv2.aggregate(pipeline))
+            return results
+        except Exception as e:
+            print(f"Erro ao buscar tickets com users: {e}")
+            return []
     
-    def get_tickets_without_amount(self) -> List[Ticket]:
-        """Busca tickets sem quantidade (amount) definida"""
-        filters = {
-            "$or": [
-                {"amount": {"$exists": False}},
-                {"amount": None},
-                {"amount": {"$in": [float('nan'), "nan"]}}
-            ]
-        }
-        
-        return self.get_tickets(filters=filters)
+    def get_tickets(self, limit: int = 100) -> List[Ticket]:
+        """Busca tickets básicos"""
+        try:
+            cursor = self.ticketv2.find().limit(limit)
+            tickets = []
+            
+            for doc in cursor:
+                ticket = Ticket(
+                    _id=str(doc.get('_id')),
+                    ticket=doc.get('ticket', 0),
+                    status=doc.get('status'),
+                    loadingDate=doc.get('loadingDate'),
+                    amount=doc.get('amount'),
+                    destinationOrder=str(doc.get('destinationOrder')) if doc.get('destinationOrder') else None,
+                    originOrder=str(doc.get('originOrder')) if doc.get('originOrder') else None,
+                    seller=doc.get('seller'),
+                    buyer=doc.get('buyer'),
+                    freightValue=doc.get('freightValue'),
+                    valueGrain=doc.get('valueGrain'),
+                    operation=str(doc.get('operation')) if doc.get('operation') else None,
+                    createdAt=doc.get('createdAt')
+                )
+                tickets.append(ticket)
+            
+            return tickets
+            
+        except Exception as e:
+            print(f"Erro ao buscar tickets: {e}")
+            return []
     
-    def get_tickets_without_orders(self) -> List[Ticket]:
-        """Busca tickets sem pedidos associados"""
-        filters = {
-            "$and": [
-                {
-                    "$or": [
-                        {"destinationOrder": {"$exists": False}},
-                        {"destinationOrder": None}
-                    ]
-                },
-                {
-                    "$or": [
-                        {"originOrder": {"$exists": False}},
-                        {"originOrder": None}
-                    ]
-                }
-            ]
-        }
+    def get_ticket_transactions(self, limit: int = 100) -> List[TicketTransaction]:
+        """Busca transações de tickets"""
+        try:
+            cursor = self.ticketv2_transactions.find().limit(limit)
+            transactions = []
+            
+            for doc in cursor:
+                transaction = TicketTransaction(
+                    _id=str(doc.get('_id')),
+                    amount=doc.get('amount'),
+                    destinationOrder=str(doc.get('destinationOrder')) if doc.get('destinationOrder') else None,
+                    originOrder=str(doc.get('originOrder')) if doc.get('originOrder') else None,
+                    ticket=str(doc.get('ticket')) if doc.get('ticket') else None,
+                    status=doc.get('status'),
+                    distanceInKm=doc.get('distanceInKm'),
+                    value=doc.get('value'),
+                    total=doc.get('total')
+                )
+                transactions.append(transaction)
+            
+            return transactions
+            
+        except Exception as e:
+            print(f"Erro ao buscar transações: {e}")
+            return []
+    
+    def get_orders(self, limit: int = 100) -> List[Order]:
+        """Busca pedidos/contratos"""
+        try:
+            cursor = self.orderv2.find().limit(limit)
+            orders = []
+            
+            for doc in cursor:
+                order = Order(
+                    _id=str(doc.get('_id')),
+                    amount=doc.get('amount'),
+                    bagPrice=doc.get('bagPrice'),
+                    deliveryDeadline=doc.get('deliveryDeadline'),
+                    buyer=doc.get('buyer'),
+                    seller=doc.get('seller'),
+                    status_flags={
+                        'isDone': doc.get('isDone', False),
+                        'isCanceled': doc.get('isCanceled', False),
+                        'isInProgress': doc.get('isInProgress', False)
+                    },
+                    createdAt=doc.get('createdAt')
+                )
+                orders.append(order)
+            
+            return orders
+            
+        except Exception as e:
+            print(f"Erro ao buscar pedidos: {e}")
+            return []
+    
+    def get_users(self, limit: int = 100) -> List[Dict]:
+        """Busca usuários"""
+        try:
+            cursor = self.users.find().limit(limit)
+            return list(cursor)
+        except Exception as e:
+            print(f"Erro ao buscar usuários: {e}")
+            return []
+    
+    def get_cargas_dataframe(self, limit: int = 1000) -> pd.DataFrame:
+        """Retorna DataFrame de cargas com informações unificadas"""
+        cargas_data = self.get_tickets_with_users(limit)
         
-        return self.get_tickets(filters=filters)
+        if not cargas_data:
+            return pd.DataFrame()
+        
+        # Processar dados para DataFrame
+        processed_data = []
+        
+        for carga in cargas_data:
+            processed_data.append({
+                'id': str(carga.get('_id')),
+                'numero_carga': carga.get('ticket', 0),
+                'status': carga.get('status', ''),
+                'data_carregamento': carga.get('loadingDate'),
+                'quantidade_sacas': carga.get('amount', 0),
+                'valor_frete': carga.get('freightValue', 0),
+                'valor_grao': carga.get('valueGrain', 0),
+                'comprador': carga.get('buyer_name', ''),
+                'vendedor': carga.get('seller_name', ''),
+                'quantidade_transacao': carga.get('transaction_amount', 0),
+                'distancia_km': carga.get('transaction_distance', 0),
+                'valor_transacao': carga.get('transaction_value', 0),
+                'operacao': carga.get('operation', ''),
+                'data_criacao': carga.get('createdAt')
+            })
+        
+        return pd.DataFrame(processed_data)
     
     def get_operation_statistics(self) -> pd.DataFrame:
         """Retorna estatísticas por operação"""
         pipeline = [
-            {
-                "$match": {
-                    "operation": {"$exists": True, "$ne": None}
-                }
-            },
+            {"$match": {"operation": {"$exists": True, "$ne": None}}},
             {
                 "$group": {
                     "_id": "$operation",
                     "total_tickets": {"$sum": 1},
+                    "total_amount": {"$sum": "$amount"},
                     "total_freight_value": {"$sum": "$freightValue"},
                     "total_grain_value": {"$sum": "$valueGrain"},
-                    "total_amount": {"$sum": "$amount"},
-                    "avg_freight_value": {"$avg": "$freightValue"},
-                    "avg_grain_value": {"$avg": "$valueGrain"},
-                    "avg_amount": {"$avg": "$amount"},
-                    "statuses": {"$addToSet": "$status"}
+                    "avg_freight_value": {"$avg": "$freightValue"}
                 }
             },
-            {
-                "$sort": {"total_tickets": DESCENDING}
-            }
+            {"$sort": {"total_tickets": -1}}
         ]
         
-        operation_stats = list(self.ticketv2.aggregate(pipeline))
-        
-        # Converter para DataFrame
-        data = []
-        for stat in operation_stats:
-            data.append({
-                'operation_id': str(stat['_id']),
-                'total_tickets': stat['total_tickets'],
-                'total_freight_value': stat.get('total_freight_value', 0),
-                'total_grain_value': stat.get('total_grain_value', 0),
-                'total_amount': stat.get('total_amount', 0),
-                'avg_freight_value': stat.get('avg_freight_value', 0),
-                'avg_grain_value': stat.get('avg_grain_value', 0),
-                'avg_amount': stat.get('avg_amount', 0),
-                'statuses': ', '.join(stat.get('statuses', []))
-            })
-        
-        return pd.DataFrame(data)
+        try:
+            results = list(self.ticketv2.aggregate(pipeline))
+            return pd.DataFrame(results)
+        except Exception as e:
+            print(f"Erro ao obter estatísticas de operação: {e}")
+            return pd.DataFrame()
     
     def get_daily_statistics(self, days: int = 30) -> pd.DataFrame:
-        """Retorna estatísticas diárias dos últimos N dias"""
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=days)
+        """Retorna estatísticas diárias"""
+        start_date = datetime.now() - timedelta(days=days)
         
         pipeline = [
-            {
-                "$match": {
-                    "loadingDate": {
-                        "$gte": start_date,
-                        "$lte": end_date
-                    }
-                }
-            },
+            {"$match": {"loadingDate": {"$gte": start_date}}},
             {
                 "$group": {
                     "_id": {
@@ -289,101 +265,104 @@ class DatabaseService:
                         }
                     },
                     "total_tickets": {"$sum": 1},
+                    "total_amount": {"$sum": "$amount"},
                     "total_freight_value": {"$sum": "$freightValue"},
-                    "total_grain_value": {"$sum": "$valueGrain"},
-                    "total_amount": {"$sum": "$amount"}
+                    "avg_freight_value": {"$avg": "$freightValue"}
                 }
             },
-            {
-                "$sort": {"_id": ASCENDING}
-            }
+            {"$sort": {"_id": 1}}
         ]
         
-        daily_stats = list(self.ticketv2.aggregate(pipeline))
-        
-        # Converter para DataFrame
-        data = []
-        for stat in daily_stats:
-            data.append({
-                'data': stat['_id'],
-                'total_tickets': stat['total_tickets'],
-                'total_freight_value': stat.get('total_freight_value', 0),
-                'total_grain_value': stat.get('total_grain_value', 0),
-                'total_amount': stat.get('total_amount', 0)
-            })
-        
-        df = pd.DataFrame(data)
-        if not df.empty:
-            df['data'] = pd.to_datetime(df['data'])
-        
-        return df
-    
-    def search_tickets(self, search_term: str) -> List[Ticket]:
-        """Busca tickets por termo (número, status, etc.)"""
-        # Tentar converter para número se possível
         try:
-            ticket_number = int(search_term)
-            filters = {"ticket": ticket_number}
-        except ValueError:
-            # Busca por texto
-            filters = {
-                "$or": [
-                    {"status": {"$regex": search_term, "$options": "i"}},
-                    {"_id": {"$regex": search_term, "$options": "i"}}
-                ]
-            }
-        
-        return self.get_tickets(filters=filters)
+            results = list(self.ticketv2.aggregate(pipeline))
+            return pd.DataFrame(results)
+        except Exception as e:
+            print(f"Erro ao obter estatísticas diárias: {e}")
+            return pd.DataFrame()
     
-    def get_audit_alerts(self) -> Dict[str, List[Dict[str, Any]]]:
+    def get_orders_summary(self) -> Dict[str, Any]:
+        """Retorna resumo dos pedidos/contratos"""
+        try:
+            total_orders = self.orderv2.count_documents({})
+            
+            pipeline = [
+                {
+                    "$group": {
+                        "_id": None,
+                        "total_amount": {"$sum": "$amount"},
+                        "media_amount": {"$avg": "$amount"},
+                        "total_bag_price": {"$sum": "$bagPrice"},
+                        "media_bag_price": {"$avg": "$bagPrice"},
+                        "done_count": {
+                            "$sum": {"$cond": [{"$eq": ["$isDone", True]}, 1, 0]}
+                        },
+                        "canceled_count": {
+                            "$sum": {"$cond": [{"$eq": ["$isCanceled", True]}, 1, 0]}
+                        }
+                    }
+                }
+            ]
+            
+            result = list(self.orderv2.aggregate(pipeline))
+            
+            if result:
+                summary = result[0]
+                summary['total_orders'] = total_orders
+                summary['done_rate'] = summary['done_count'] / total_orders if total_orders > 0 else 0
+                return summary
+            
+            return {'total_orders': total_orders}
+            
+        except Exception as e:
+            print(f"Erro ao obter resumo de pedidos: {e}")
+            return {}
+    
+    def get_audit_alerts(self) -> Dict[str, List]:
         """Retorna alertas de auditoria"""
         alerts = {
-            'tickets_sem_amount': [],
-            'tickets_sem_orders': [],
-            'tickets_com_problemas': [],
-            'orders_vencidos': []
+            'cargas_sem_amount': [],
+            'cargas_sem_orders': [],
+            'cargas_com_problemas': [],
+            'contratos_vencidos': []
         }
         
-        # Tickets sem amount
-        tickets_sem_amount = self.get_tickets_without_amount()
-        for ticket in tickets_sem_amount[:10]:  # Limitar a 10
-            alerts['tickets_sem_amount'].append({
-                'ticket_id': ticket._id,
-                'ticket_number': ticket.ticket,
-                'status': ticket.status,
-                'loadingDate': ticket.loadingDate
-            })
-        
-        # Tickets sem pedidos
-        tickets_sem_orders = self.get_tickets_without_orders()
-        for ticket in tickets_sem_orders[:10]:  # Limitar a 10
-            alerts['tickets_sem_orders'].append({
-                'ticket_id': ticket._id,
-                'ticket_number': ticket.ticket,
-                'status': ticket.status,
-                'loadingDate': ticket.loadingDate
-            })
-        
-        # Orders vencidos (prazo de entrega passou)
-        today = datetime.now()
-        filters = {
-            "deliveryDeadline": {"$lt": today},
-            "isDone": False,
-            "isCanceled": False
-        }
-        
-        for doc in self.orderv2.find(filters).limit(10):
-            try:
-                order = Order.from_mongo(doc)
-                alerts['orders_vencidos'].append({
-                    'order_id': order._id,
-                    'deliveryDeadline': order.deliveryDeadline,
-                    'amount': order.amount,
-                    'buyer_name': order.buyer.get('name', '') if order.buyer else '',
-                    'seller_name': order.seller.get('name', '') if order.seller else ''
+        try:
+            # Cargas sem quantidade
+            cargas_sem_amount = self.ticketv2.find(
+                {"amount": {"$in": [None, 0]}},
+                {"_id": 1, "ticket": 1, "status": 1, "loadingDate": 1}
+            ).limit(10)
+            
+            for carga in cargas_sem_amount:
+                alerts['cargas_sem_amount'].append({
+                    'carga_id': str(carga['_id']),
+                    'numero_carga': carga.get('ticket', 0),
+                    'status': carga.get('status'),
+                    'loadingDate': carga.get('loadingDate')
                 })
-            except Exception as e:
-                continue
-        
-        return alerts
+            
+            # Cargas sem pedidos
+            cargas_sem_orders = self.ticketv2.find(
+                {
+                    "$and": [
+                        {"destinationOrder": {"$in": [None, ""]}},
+                        {"originOrder": {"$in": [None, ""]}}
+                    ]
+                },
+                {"_id": 1, "ticket": 1, "status": 1, "loadingDate": 1}
+            ).limit(10)
+            
+            for carga in cargas_sem_orders:
+                alerts['cargas_sem_orders'].append({
+                    'carga_id': str(carga['_id']),
+                    'numero_carga': carga.get('ticket', 0),
+                    'status': carga.get('status'),
+                    'loadingDate': carga.get('loadingDate')
+                })
+            
+            return alerts
+            
+        except Exception as e:
+            print(f"Erro ao obter alertas: {e}")
+            return alerts
 

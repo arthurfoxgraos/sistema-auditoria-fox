@@ -1,32 +1,33 @@
 """
-Configuração de conexão com MongoDB para o sistema de auditoria FOX
+Configuração de conexão com MongoDB
 """
 import os
 from pymongo import MongoClient
-from pymongo.errors import ConnectionFailure
-import streamlit as st
 
 class DatabaseConfig:
+    """Configuração e conexão com MongoDB"""
+    
     def __init__(self):
-        # String de conexão MongoDB
         self.connection_string = "mongodb+srv://doadmin:5vk9a08N2tX3e64U@foxdigital-e8bf0024.mongo.ondigitalocean.com/admin?authSource=admin&replicaSet=foxdigital"
+        self.database_name = "fox"
         self.client = None
         self.db = None
-        
+    
     def connect(self):
         """Estabelece conexão com MongoDB"""
         try:
             self.client = MongoClient(self.connection_string)
-            # Testa a conexão
+            
+            # Testar conexão
             self.client.admin.command('ping')
-            
-            # Conecta ao banco de dados fox (onde estão os dados)
-            self.db = self.client['fox']
-            
             print("✅ Conexão com MongoDB estabelecida com sucesso!")
+            
+            # Selecionar banco de dados
+            self.db = self.client[self.database_name]
+            
             return True
             
-        except ConnectionFailure as e:
+        except Exception as e:
             print(f"❌ Erro ao conectar com MongoDB: {e}")
             return False
         except Exception as e:
@@ -41,38 +42,38 @@ class DatabaseConfig:
         collections = {
             'ticketv2': self.db['ticketv2'],
             'ticketv2_transactions': self.db['ticketv2_transactions'],
-            'orderv2': self.db['orderv2']
+            'orderv2': self.db['orderv2'],
+            'users': self.db['users'],
+            'provisionings': self.db['provisionings']
         }
         
         return collections
     
     def test_collections(self):
         """Testa se as coleções existem e têm dados"""
-        try:
-            collections = self.get_collections()
-            results = {}
-            
-            for name, collection in collections.items():
+        collections_to_test = ['ticketv2', 'ticketv2_transactions', 'orderv2', 'users', 'provisionings']
+        results = {}
+        
+        for collection_name in collections_to_test:
+            try:
+                collection = self.db[collection_name]
                 count = collection.count_documents({})
-                results[name] = count
-                print(f"📊 {name}: {count} documentos")
-                
-            return results
-            
-        except Exception as e:
-            print(f"❌ Erro ao testar coleções: {e}")
-            return {}
+                results[collection_name] = count
+                print(f"📊 {collection_name}: {count:,} documentos")
+            except Exception as e:
+                print(f"❌ Erro ao acessar {collection_name}: {e}")
+                results[collection_name] = 0
+        
+        return results
     
     def close_connection(self):
-        """Fecha a conexão com MongoDB"""
+        """Fecha conexão com MongoDB"""
         if self.client:
             self.client.close()
             print("🔌 Conexão com MongoDB fechada")
 
-# Instância global para uso no Streamlit
-@st.cache_resource
 def get_database_connection():
-    """Retorna conexão cached com MongoDB"""
+    """Função helper para obter conexão com banco"""
     db_config = DatabaseConfig()
     if db_config.connect():
         return db_config
