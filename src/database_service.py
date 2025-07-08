@@ -324,7 +324,7 @@ class DatabaseService:
 
     def get_finances_with_lookups(self, limit: int = 100) -> List[Dict]:
         """Busca dados financeiros com lookup de categories e users"""
-        if not self.finances:
+        if self.finances is None:
             print("Coleção finances não disponível")
             return []
             
