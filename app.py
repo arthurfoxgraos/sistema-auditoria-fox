@@ -175,9 +175,11 @@ def show_cargas_page():
     
     with col2:
         if 'loadingDate' in df_tickets.columns:
+            # Usar uma data mais antiga como padrão para mostrar mais dados
+            default_date = datetime.now() - timedelta(days=365)  # 1 ano atrás
             date_filter = st.date_input(
                 "Data de carregamento (a partir de):",
-                value=datetime.now() - timedelta(days=30)
+                value=default_date
             )
         else:
             date_filter = None
@@ -195,8 +197,11 @@ def show_cargas_page():
         df_filtered = df_filtered[df_filtered['status'] == status_filter]
     
     if date_filter and 'loadingDate' in df_filtered.columns:
+        # Converter loadingDate para datetime se necessário
+        df_filtered['loadingDate'] = pd.to_datetime(df_filtered['loadingDate'], errors='coerce')
+        # Filtrar por data
         df_filtered = df_filtered[
-            pd.to_datetime(df_filtered['loadingDate']).dt.date >= date_filter
+            df_filtered['loadingDate'].dt.date >= date_filter
         ]
     
     if user_filter:
@@ -245,8 +250,9 @@ def show_cargas_page():
             
             # Formatar data se existir
             if 'Data de Carregamento' in df_display.columns:
+                # Garantir que é datetime antes de formatar
                 df_display['Data de Carregamento'] = pd.to_datetime(
-                    df_display['Data de Carregamento']
+                    df_display['Data de Carregamento'], errors='coerce'
                 ).dt.strftime('%d/%m/%Y')
             
             # Formatar sacas se existir
