@@ -6,11 +6,12 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from datetime import datetime, timedelta
-import sys
+from datetime import datetime, date
+import datetime
 import os
+import sys
 
-# Configurar path
+# Adicionar diretórios ao path
 sys.path.append(os.path.join(os.path.dirname(__file__), 'config'))
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
@@ -164,7 +165,7 @@ def show_cargas_page():
     
     # Filtros
     st.subheader("🔍 Filtros")
-    col1, col2 = st.columns(2)
+    col1, col2, col3, col4 = st.columns(4)
     
     with col1:
         if 'status' in df_tickets.columns:
@@ -174,6 +175,36 @@ def show_cargas_page():
             status_filter = "Todos"
     
     with col2:
+        # Filtro por intervalo de datas
+        if 'loadingDate' in df_tickets.columns:
+            df_tickets['loadingDate'] = pd.to_datetime(df_tickets['loadingDate'], errors='coerce')
+            min_date = df_tickets['loadingDate'].min().date() if not df_tickets['loadingDate'].isna().all() else datetime.date(2025, 1, 1)
+            max_date = df_tickets['loadingDate'].max().date() if not df_tickets['loadingDate'].isna().all() else datetime.date.today()
+            
+            date_range = st.date_input(
+                "Intervalo de datas:",
+                value=(min_date, max_date),
+                min_value=min_date,
+                max_value=max_date,
+                key="date_range_filter"
+            )
+        else:
+            date_range = None
+    
+    with col3:
+        # Filtro por tipo de contrato
+        contract_types = ["Todos"]
+        if 'contract_type' in df_tickets.columns:
+            unique_types = df_tickets['contract_type'].dropna().unique()
+            contract_types.extend(unique_types)
+        
+        contract_filter = st.selectbox(
+            "Tipo de Contrato:",
+            options=contract_types,
+            key="contract_filter"
+        )
+    
+    with col4:
         if 'seller_name' in df_tickets.columns or 'buyer_name' in df_tickets.columns:
             user_filter = st.text_input("Filtrar por vendedor/comprador:")
         else:
@@ -182,9 +213,24 @@ def show_cargas_page():
     # Aplicar filtros
     df_filtered = df_tickets.copy()
     
+    # Filtro por status
     if status_filter != "Todos" and 'status' in df_filtered.columns:
         df_filtered = df_filtered[df_filtered['status'] == status_filter]
     
+    # Filtro por intervalo de datas
+    if date_range and len(date_range) == 2 and 'loadingDate' in df_filtered.columns:
+        start_date, end_date = date_range
+        df_filtered['loadingDate'] = pd.to_datetime(df_filtered['loadingDate'], errors='coerce')
+        df_filtered = df_filtered[
+            (df_filtered['loadingDate'].dt.date >= start_date) & 
+            (df_filtered['loadingDate'].dt.date <= end_date)
+        ]
+    
+    # Filtro por tipo de contrato
+    if contract_filter != "Todos" and 'contract_type' in df_filtered.columns:
+        df_filtered = df_filtered[df_filtered['contract_type'] == contract_filter]
+    
+    # Filtro por usuário (vendedor/comprador)
     if user_filter:
         if 'seller_name' in df_filtered.columns:
             mask1 = df_filtered['seller_name'].str.contains(user_filter, case=False, na=False)
