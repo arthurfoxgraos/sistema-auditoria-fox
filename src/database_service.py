@@ -74,6 +74,15 @@ class DatabaseService:
                     "as": "driver_info"
                 }
             },
+            # Lookup com grains através do destinationOrder
+            {
+                "$lookup": {
+                    "from": "grains",
+                    "localField": "destination_order_info.grain",
+                    "foreignField": "_id",
+                    "as": "grain_info"
+                }
+            },
             # Adicionar campos calculados
             {
                 "$addFields": {
@@ -95,6 +104,7 @@ class DatabaseService:
                             "$driverName"
                         ]
                     },
+                    "grain_name": {"$arrayElemAt": ["$grain_info.name", 0]},
                     # Extrair amount do array transactions
                     "amount": {"$sum": "$transactions.amount"},
                     "transaction_distance": {"$avg": "$transactions.distanceInKm"},

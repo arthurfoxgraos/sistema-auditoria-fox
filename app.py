@@ -210,6 +210,7 @@ def show_cargas_page():
             'buyer_name': 'Comprador',
             'seller_name': 'Vendedor',
             'driver_name': 'Caminhoneiro',
+            'grain_name': 'Grão',
             'amount': 'Sacas'
         }
         
