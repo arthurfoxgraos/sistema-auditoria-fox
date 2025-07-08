@@ -101,6 +101,48 @@ class DatabaseService:
                     "transaction_value": {"$sum": "$transactions.valueGrainReceive"}
                 }
             },
+            # Lookup com provisionamentos para verificar conformidade
+            {
+                "$lookup": {
+                    "from": "provisionings",
+                    "let": {
+                        "dest_order": "$destinationOrder",
+                        "orig_order": "$originOrder"
+                    },
+                    "pipeline": [
+                        {
+                            "$match": {
+                                "$expr": {
+                                    "$or": [
+                                        {"$eq": ["$_id", "$$dest_order"]},
+                                        {"$in": ["$$orig_order", "$sellersOrders._id"]}
+                                    ]
+                                }
+                            }
+                        }
+                    ],
+                    "as": "matching_provisionings"
+                }
+            },
+            # Adicionar status de conformidade
+            {
+                "$addFields": {
+                    "is_compliant": {
+                        "$cond": {
+                            "if": {"$gt": [{"$size": "$matching_provisionings"}, 0]},
+                            "then": True,
+                            "else": False
+                        }
+                    },
+                    "compliance_status": {
+                        "$cond": {
+                            "if": {"$gt": [{"$size": "$matching_provisionings"}, 0]},
+                            "then": "✅ Conforme",
+                            "else": "⚠️ Não conforme"
+                        }
+                    }
+                }
+            },
             {"$sort": {"ticket": -1}},
             {"$limit": limit}
         ]

@@ -218,6 +218,11 @@ def show_cargas_page():
             if col in df_filtered.columns:
                 display_columns.append(col)
         
+        # Adicionar coluna de conformidade se existir
+        if 'compliance_status' in df_filtered.columns:
+            display_columns.append('compliance_status')
+            column_mapping['compliance_status'] = 'Status'
+        
         # Se temos transaction_amount mas não amount, usar transaction_amount como Sacas
         if 'amount' not in df_filtered.columns and 'transaction_amount' in df_filtered.columns:
             df_filtered['amount'] = df_filtered['transaction_amount']
