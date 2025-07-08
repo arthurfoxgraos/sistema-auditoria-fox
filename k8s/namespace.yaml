@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: fox-auditoria
+  labels:
+    name: fox-auditoria
+    app: sistema-auditoria-fox
+

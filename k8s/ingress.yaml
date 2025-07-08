@@ -1,0 +1,30 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: fox-auditoria-ingress
+  namespace: fox-auditoria
+  labels:
+    app: fox-auditoria
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - fox-auditoria.seu-dominio.com  # Substitua pelo seu domínio
+    secretName: fox-auditoria-tls
+  rules:
+  - host: fox-auditoria.seu-dominio.com  # Substitua pelo seu domínio
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: fox-auditoria-service
+            port:
+              number: 80
+
