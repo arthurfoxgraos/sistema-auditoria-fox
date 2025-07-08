@@ -30,16 +30,12 @@ spec:
         - "-c"
         - |
           pip install streamlit pandas plotly pymongo &&
-          mkdir -p /app/pages /app/src /app/config &&
-          cat > /app/app.py << 'EOF'
+          cat > app.py << 'EOF'
           import streamlit as st
           import pandas as pd
           import plotly.express as px
           from datetime import datetime, timedelta
-          import os
-          import sys
           
-          # Configuração da página
           st.set_page_config(
               page_title="Sistema FOX - Auditoria",
               page_icon="🚛",
@@ -47,7 +43,6 @@ spec:
               initial_sidebar_state="expanded"
           )
           
-          # CSS customizado
           st.markdown("""
           <style>
               .main-header {
@@ -57,23 +52,14 @@ spec:
                   text-align: center;
                   margin-bottom: 2rem;
               }
-              .metric-card {
-                  background-color: #f0f2f6;
-                  padding: 1rem;
-                  border-radius: 0.5rem;
-                  border-left: 4px solid #1f77b4;
-              }
           </style>
           """, unsafe_allow_html=True)
           
           def main():
-              # Header
               st.markdown('<h1 class="main-header">🚛 Sistema FOX - Auditoria Completa</h1>', unsafe_allow_html=True)
               
-              # Sidebar
               st.sidebar.title("📊 Navegação")
               
-              # Menu de navegação
               page = st.sidebar.selectbox(
                   "Selecione uma página:",
                   [
@@ -99,44 +85,22 @@ spec:
           def show_dashboard():
               st.header("📊 Dashboard Principal")
               
-              # Métricas principais
               col1, col2, col3, col4 = st.columns(4)
               
               with col1:
-                  st.metric(
-                      label="🚚 Total de Cargas",
-                      value="1,234",
-                      delta="12 hoje"
-                  )
-              
+                  st.metric("🚚 Total de Cargas", "1,234", "12 hoje")
               with col2:
-                  st.metric(
-                      label="📦 Provisionamentos",
-                      value="567",
-                      delta="5 pendentes"
-                  )
-              
+                  st.metric("📦 Provisionamentos", "567", "5 pendentes")
               with col3:
-                  st.metric(
-                      label="💰 Receita Total",
-                      value="R$ 2.5M",
-                      delta="R$ 150K este mês"
-                  )
-              
+                  st.metric("💰 Receita Total", "R$ 2.5M", "R$ 150K este mês")
               with col4:
-                  st.metric(
-                      label="📋 Contratos Ativos",
-                      value="89",
-                      delta="3 novos"
-                  )
+                  st.metric("📋 Contratos Ativos", "89", "3 novos")
               
-              # Gráficos de exemplo
               st.subheader("📈 Análises")
               
               col1, col2 = st.columns(2)
               
               with col1:
-                  # Gráfico de cargas por mês
                   data = {
                       'Mês': ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun'],
                       'Cargas': [120, 135, 148, 162, 155, 178]
@@ -146,7 +110,6 @@ spec:
                   st.plotly_chart(fig, use_container_width=True)
               
               with col2:
-                  # Gráfico de receita
                   data = {
                       'Categoria': ['Grãos', 'Frete', 'Outros'],
                       'Valor': [1500000, 800000, 200000]
@@ -155,21 +118,17 @@ spec:
                   fig = px.pie(df, values='Valor', names='Categoria', title="Receita por Categoria")
                   st.plotly_chart(fig, use_container_width=True)
               
-              # Status do sistema
               st.subheader("🔧 Status do Sistema")
               
               col1, col2, col3 = st.columns(3)
               
               with col1:
                   st.success("✅ MongoDB: Conectado")
-              
               with col2:
                   st.success("✅ Kubernetes: Online")
-              
               with col3:
                   st.success("✅ LoadBalancer: Ativo")
               
-              # Informações do deployment
               st.subheader("ℹ️ Informações do Sistema")
               
               info_data = {
@@ -183,7 +142,6 @@ spec:
               st.header("🚚 Gestão de Cargas")
               st.info("🔄 Módulo de cargas será implementado com conexão MongoDB completa.")
               
-              # Exemplo de dados
               data = {
                   'Ticket': ['T001', 'T002', 'T003'],
                   'Data': ['2025-01-07', '2025-01-07', '2025-01-06'],
@@ -197,7 +155,6 @@ spec:
               st.header("📦 Gestão de Provisionamento")
               st.info("🔄 Módulo de provisionamento será implementado com conexão MongoDB completa.")
               
-              # Exemplo de dados
               data = {
                   'ID': ['P001', 'P002', 'P003'],
                   'Grão': ['Soja', 'Milho', 'Sorgo'],
@@ -211,7 +168,6 @@ spec:
               st.header("💰 Gestão Financeira")
               st.info("🔄 Módulo financeiro será implementado com conexão MongoDB completa.")
               
-              # Exemplo de dados
               data = {
                   'Data': ['2025-01-07', '2025-01-06', '2025-01-05'],
                   'Descrição': ['Recebimento Cargill', 'Pagamento Frete', 'Venda Soja'],
@@ -224,7 +180,6 @@ spec:
               st.header("📋 Gestão de Contratos")
               st.info("🔄 Módulo de contratos será implementado com conexão MongoDB completa.")
               
-              # Exemplo de dados
               data = {
                   'ID': ['C001', 'C002', 'C003'],
                   'Cliente': ['CARGILL', 'ADM', 'BUNGE'],

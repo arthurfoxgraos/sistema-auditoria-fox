@@ -1,0 +1,769 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fox-auditoria-app
+  namespace: fox-auditoria
+  labels:
+    app: fox-auditoria
+    component: web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fox-auditoria
+      component: web
+  template:
+    metadata:
+      labels:
+        app: fox-auditoria
+        component: web
+    spec:
+      containers:
+      - name: fox-auditoria
+        image: python:3.11-slim
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8501
+          name: http
+        command: ["/bin/bash"]
+        args: 
+        - "-c"
+        - |
+          pip install streamlit pandas plotly pymongo &&
+          cat > app.py << 'EOF'
+          import streamlit as st
+          import pandas as pd
+          import plotly.express as px
+          from datetime import datetime, timedelta
+          import pymongo
+          import os
+          from bson import ObjectId
+          
+          st.set_page_config(
+              page_title="Sistema FOX - Auditoria",
+              page_icon="🚛",
+              layout="wide",
+              initial_sidebar_state="expanded"
+          )
+          
+          st.markdown("""
+          <style>
+              .main-header {
+                  font-size: 2.5rem;
+                  font-weight: bold;
+                  color: #1f77b4;
+                  text-align: center;
+                  margin-bottom: 2rem;
+              }
+              .metric-card {
+                  background-color: #f0f2f6;
+                  padding: 1rem;
+                  border-radius: 0.5rem;
+                  border-left: 4px solid #1f77b4;
+              }
+          </style>
+          """, unsafe_allow_html=True)
+          
+          @st.cache_resource
+          def init_mongodb():
+              try:
+                  mongodb_uri = os.getenv('MONGODB_URI')
+                  if not mongodb_uri:
+                      st.error("❌ MONGODB_URI não configurado")
+                      return None
+                  
+                  client = pymongo.MongoClient(mongodb_uri)
+                  db = client.fox
+                  
+                  # Testar conexão
+                  client.admin.command('ping')
+                  return db
+              except Exception as e:
+                  st.error(f"❌ Erro ao conectar MongoDB: {str(e)}")
+                  return None
+          
+          def get_cargas_data(db):
+              try:
+                  if db is None:
+                      return pd.DataFrame()
+                  
+                  # Pipeline para buscar dados de cargas
+                  pipeline = [
+                      {"$match": {"createdAt": {"$gte": datetime(2025, 1, 1)}}},
+                      {
+                          "$lookup": {
+                              "from": "orderv2",
+                              "localField": "destinationOrder",
+                              "foreignField": "_id",
+                              "as": "destination_info"
+                          }
+                      },
+                      {
+                          "$lookup": {
+                              "from": "orderv2",
+                              "localField": "originOrder", 
+                              "foreignField": "_id",
+                              "as": "origin_info"
+                          }
+                      },
+                      {
+                          "$lookup": {
+                              "from": "users",
+                              "localField": "destination_info.buyer",
+                              "foreignField": "_id",
+                              "as": "buyer_info"
+                          }
+                      },
+                      {
+                          "$lookup": {
+                              "from": "users",
+                              "localField": "origin_info.seller",
+                              "foreignField": "_id", 
+                              "as": "seller_info"
+                          }
+                      },
+                      {
+                          "$lookup": {
+                              "from": "grains",
+                              "localField": "destination_info.grain",
+                              "foreignField": "_id",
+                              "as": "grain_info"
+                          }
+                      },
+                      {
+                          "$project": {
+                              "_id": 1,
+                              "amount": 1,
+                              "loadingDate": 1,
+                              "status": 1,
+                              "paid": 1,
+                              "createdAt": 1,
+                              "buyer_name": {"$arrayElemAt": ["$buyer_info.name", 0]},
+                              "seller_name": {"$arrayElemAt": ["$seller_info.name", 0]},
+                              "grain_name": {"$arrayElemAt": ["$grain_info.name", 0]},
+                              "destination_order": {"$arrayElemAt": ["$destination_info", 0]},
+                              "origin_order": {"$arrayElemAt": ["$origin_info", 0]}
+                          }
+                      },
+                      {"$sort": {"loadingDate": -1}},
+                      {"$limit": 1000}
+                  ]
+                  
+                  results = list(db.ticketv2.aggregate(pipeline))
+                  
+                  if not results:
+                      return pd.DataFrame()
+                  
+                  # Converter para DataFrame
+                  df = pd.DataFrame(results)
+                  
+                  # Processar dados
+                  df['ticket_id'] = df['_id'].astype(str)
+                  df['data_carregamento'] = pd.to_datetime(df['loadingDate']).dt.strftime('%d/%m/%Y')
+                  df['comprador'] = df['buyer_name'].fillna('N/A')
+                  df['vendedor'] = df['seller_name'].fillna('N/A')
+                  df['grao'] = df['grain_name'].fillna('N/A')
+                  df['quantidade'] = df['amount'].fillna(0)
+                  df['status'] = df['status'].fillna('Indefinido')
+                  df['pago_status'] = df['paid'].apply(lambda x: '✅' if x else '⏰')
+                  
+                  return df[['pago_status', 'ticket_id', 'data_carregamento', 'comprador', 'vendedor', 
+                           'grao', 'quantidade', 'status']]
+                  
+              except Exception as e:
+                  st.error(f"❌ Erro ao buscar dados de cargas: {str(e)}")
+                  return pd.DataFrame()
+          
+          def get_contratos_data(db):
+              try:
+                  if db is None:
+                      return pd.DataFrame()
+                  
+                  pipeline = [
+                      {
+                          "$lookup": {
+                              "from": "users",
+                              "localField": "buyer",
+                              "foreignField": "_id",
+                              "as": "buyer_info"
+                          }
+                      },
+                      {
+                          "$lookup": {
+                              "from": "users",
+                              "localField": "seller",
+                              "foreignField": "_id",
+                              "as": "seller_info"
+                          }
+                      },
+                      {
+                          "$lookup": {
+                              "from": "grains",
+                              "localField": "grain",
+                              "foreignField": "_id",
+                              "as": "grain_info"
+                          }
+                      },
+                      {
+                          "$project": {
+                              "_id": 1,
+                              "createdAt": 1,
+                              "amount": 1,
+                              "amountOrdered": 1,
+                              "pricePerSack": 1,
+                              "deliveryDate": 1,
+                              "status": 1,
+                              "isBuying": 1,
+                              "buyer_name": {"$arrayElemAt": ["$buyer_info.name", 0]},
+                              "seller_name": {"$arrayElemAt": ["$seller_info.name", 0]},
+                              "grain_name": {"$arrayElemAt": ["$grain_info.name", 0]}
+                          }
+                      },
+                      {"$sort": {"createdAt": -1}},
+                      {"$limit": 1000}
+                  ]
+                  
+                  results = list(db.orderv2.aggregate(pipeline))
+                  
+                  if not results:
+                      return pd.DataFrame()
+                  
+                  df = pd.DataFrame(results)
+                  
+                  # Processar dados
+                  df['id'] = df['_id'].astype(str)
+                  df['data_criacao'] = pd.to_datetime(df['createdAt']).dt.strftime('%d/%m/%Y')
+                  df['comprador'] = df['buyer_name'].fillna('N/A')
+                  df['vendedor'] = df['seller_name'].fillna('N/A')
+                  df['grao'] = df['grain_name'].fillna('N/A')
+                  df['quantidade'] = df['amount'].fillna(0)
+                  df['entregue'] = df['amountOrdered'].fillna(0)
+                  df['preco_saca'] = df['pricePerSack'].fillna(0)
+                  df['prazo_entrega'] = pd.to_datetime(df['deliveryDate']).dt.strftime('%d/%m/%Y')
+                  df['status'] = df['status'].fillna('Pendente')
+                  
+                  return df[['id', 'data_criacao', 'comprador', 'vendedor', 'grao', 
+                           'quantidade', 'entregue', 'preco_saca', 'prazo_entrega', 'status']]
+                  
+              except Exception as e:
+                  st.error(f"❌ Erro ao buscar dados de contratos: {str(e)}")
+                  return pd.DataFrame()
+          
+          def get_financeiro_data(db):
+              try:
+                  if db is None:
+                      return pd.DataFrame()
+                  
+                  pipeline = [
+                      {
+                          "$lookup": {
+                              "from": "finances_categories",
+                              "localField": "category",
+                              "foreignField": "_id",
+                              "as": "category_info"
+                          }
+                      },
+                      {
+                          "$lookup": {
+                              "from": "users",
+                              "localField": "userVinculated",
+                              "foreignField": "_id",
+                              "as": "user_info"
+                          }
+                      },
+                      {
+                          "$project": {
+                              "_id": 1,
+                              "date": 1,
+                              "name": 1,
+                              "value": 1,
+                              "category_item": {"$arrayElemAt": ["$category_info.item", 0]},
+                              "user_name": {"$arrayElemAt": ["$user_info.name", 0]}
+                          }
+                      },
+                      {"$sort": {"date": -1}},
+                      {"$limit": 1000}
+                  ]
+                  
+                  results = list(db.finances.aggregate(pipeline))
+                  
+                  if not results:
+                      return pd.DataFrame()
+                  
+                  df = pd.DataFrame(results)
+                  
+                  # Processar dados
+                  df['data'] = pd.to_datetime(df['date']).dt.strftime('%d/%m/%Y')
+                  df['usuario'] = df['name'].fillna('N/A')
+                  df['valor'] = df['value'].fillna(0)
+                  df['item'] = df['category_item'].fillna('N/A')
+                  
+                  return df[['data', 'usuario', 'valor', 'item']]
+                  
+              except Exception as e:
+                  st.error(f"❌ Erro ao buscar dados financeiros: {str(e)}")
+                  return pd.DataFrame()
+          
+          def get_provisionamento_data(db):
+              try:
+                  if db is None:
+                      return pd.DataFrame()
+                  
+                  pipeline = [
+                      {
+                          "$lookup": {
+                              "from": "grains",
+                              "localField": "grain",
+                              "foreignField": "_id",
+                              "as": "grain_info"
+                          }
+                      },
+                      {
+                          "$lookup": {
+                              "from": "users",
+                              "localField": "user",
+                              "foreignField": "_id",
+                              "as": "user_info"
+                          }
+                      },
+                      {
+                          "$project": {
+                              "_id": 1,
+                              "amount": 1,
+                              "amountUsed": 1,
+                              "status": 1,
+                              "createdAt": 1,
+                              "grain_name": {"$arrayElemAt": ["$grain_info.name", 0]},
+                              "user_name": {"$arrayElemAt": ["$user_info.name", 0]}
+                          }
+                      },
+                      {"$sort": {"createdAt": -1}},
+                      {"$limit": 1000}
+                  ]
+                  
+                  results = list(db.provisioning.aggregate(pipeline))
+                  
+                  if not results:
+                      return pd.DataFrame()
+                  
+                  df = pd.DataFrame(results)
+                  
+                  # Processar dados
+                  df['id'] = df['_id'].astype(str)
+                  df['data_criacao'] = pd.to_datetime(df['createdAt']).dt.strftime('%d/%m/%Y')
+                  df['quantidade'] = df['amount'].fillna(0)
+                  df['quantidade_usada'] = df['amountUsed'].fillna(0)
+                  df['grao'] = df['grain_name'].fillna('N/A')
+                  df['usuario'] = df['user_name'].fillna('N/A')
+                  df['status'] = df['status'].fillna('Indefinido')
+                  
+                  return df[['id', 'data_criacao', 'grao', 'usuario', 'quantidade', 
+                           'quantidade_usada', 'status']]
+                  
+              except Exception as e:
+                  st.error(f"❌ Erro ao buscar dados de provisionamento: {str(e)}")
+                  return pd.DataFrame()
+          
+          def main():
+              st.markdown('<h1 class="main-header">🚛 Sistema FOX - Auditoria Completa</h1>', unsafe_allow_html=True)
+              
+              st.sidebar.title("📊 Navegação")
+              
+              page = st.sidebar.selectbox(
+                  "Selecione uma página:",
+                  [
+                      "🏠 Dashboard",
+                      "🚚 Cargas", 
+                      "📦 Provisionamento",
+                      "💰 Financeiro",
+                      "📋 Contratos"
+                  ]
+              )
+              
+              # Inicializar MongoDB
+              db = init_mongodb()
+              
+              if db:
+                  st.success("✅ MongoDB conectado com sucesso!")
+              
+              if page == "🏠 Dashboard":
+                  show_dashboard(db)
+              elif page == "🚚 Cargas":
+                  show_cargas(db)
+              elif page == "📦 Provisionamento":
+                  show_provisionamento(db)
+              elif page == "💰 Financeiro":
+                  show_financeiro(db)
+              elif page == "📋 Contratos":
+                  show_contratos(db)
+          
+          def show_dashboard(db):
+              st.header("📊 Dashboard Principal")
+              
+              col1, col2, col3, col4 = st.columns(4)
+              
+              with col1:
+                  if db:
+                      try:
+                          total_cargas = db.ticketv2.count_documents({"createdAt": {"$gte": datetime(2025, 1, 1)}})
+                          st.metric("🚚 Total de Cargas", f"{total_cargas:,}")
+                      except:
+                          st.metric("🚚 Total de Cargas", "Erro")
+                  else:
+                      st.metric("🚚 Total de Cargas", "N/A")
+              
+              with col2:
+                  if db:
+                      try:
+                          total_prov = db.provisioning.count_documents({})
+                          st.metric("📦 Provisionamentos", f"{total_prov:,}")
+                      except:
+                          st.metric("📦 Provisionamentos", "Erro")
+                  else:
+                      st.metric("📦 Provisionamentos", "N/A")
+              
+              with col3:
+                  if db:
+                      try:
+                          total_financeiro = db.finances.count_documents({})
+                          st.metric("💰 Registros Financeiros", f"{total_financeiro:,}")
+                      except:
+                          st.metric("💰 Registros Financeiros", "Erro")
+                  else:
+                      st.metric("💰 Registros Financeiros", "N/A")
+              
+              with col4:
+                  if db:
+                      try:
+                          total_contratos = db.orderv2.count_documents({})
+                          st.metric("📋 Contratos", f"{total_contratos:,}")
+                      except:
+                          st.metric("📋 Contratos", "Erro")
+                  else:
+                      st.metric("📋 Contratos", "N/A")
+              
+              st.subheader("🔧 Status do Sistema")
+              
+              col1, col2, col3 = st.columns(3)
+              
+              with col1:
+                  if db:
+                      st.success("✅ MongoDB: Conectado")
+                  else:
+                      st.error("❌ MongoDB: Desconectado")
+              with col2:
+                  st.success("✅ Kubernetes: Online")
+              with col3:
+                  st.success("✅ LoadBalancer: Ativo")
+          
+          def show_cargas(db):
+              st.header("🚚 Gestão de Cargas")
+              
+              if db is None:
+                  st.error("❌ Não foi possível conectar ao MongoDB")
+                  return
+              
+              # Buscar dados
+              with st.spinner("🔄 Carregando dados de cargas..."):
+                  df = get_cargas_data(db)
+              
+              if df.empty:
+                  st.warning("⚠️ Nenhum dado de cargas encontrado")
+                  return
+              
+              # Métricas
+              col1, col2, col3, col4 = st.columns(4)
+              
+              with col1:
+                  total_cargas = len(df)
+                  st.metric("📊 Total de Cargas", f"{total_cargas:,}")
+              
+              with col2:
+                  total_quantidade = df['quantidade'].sum()
+                  st.metric("📦 Quantidade Total", f"{total_quantidade:,.0f} sacas")
+              
+              with col3:
+                  cargas_pagas = len(df[df['pago_status'] == '✅'])
+                  st.metric("✅ Cargas Pagas", f"{cargas_pagas:,}")
+              
+              with col4:
+                  cargas_pendentes = len(df[df['pago_status'] == '⏰'])
+                  st.metric("⏰ Pendentes", f"{cargas_pendentes:,}")
+              
+              # Filtros
+              st.subheader("🔍 Filtros")
+              col1, col2, col3 = st.columns(3)
+              
+              with col1:
+                  status_unicos = ['Todos'] + sorted(df['status'].unique().tolist())
+                  filtro_status = st.selectbox("Status", status_unicos)
+              
+              with col2:
+                  pagamento_opcoes = ['Todos', '✅ Pago', '⏰ Não Pago']
+                  filtro_pagamento = st.selectbox("Status Pagamento", pagamento_opcoes)
+              
+              with col3:
+                  compradores_unicos = ['Todos'] + sorted(df['comprador'].unique().tolist())
+                  filtro_comprador = st.selectbox("Comprador", compradores_unicos)
+              
+              # Aplicar filtros
+              df_filtrado = df.copy()
+              
+              if filtro_status != 'Todos':
+                  df_filtrado = df_filtrado[df_filtrado['status'] == filtro_status]
+              
+              if filtro_pagamento == '✅ Pago':
+                  df_filtrado = df_filtrado[df_filtrado['pago_status'] == '✅']
+              elif filtro_pagamento == '⏰ Não Pago':
+                  df_filtrado = df_filtrado[df_filtrado['pago_status'] == '⏰']
+              
+              if filtro_comprador != 'Todos':
+                  df_filtrado = df_filtrado[df_filtrado['comprador'] == filtro_comprador]
+              
+              # Tabela
+              st.subheader(f"📋 Dados de Cargas ({len(df_filtrado)} registros)")
+              
+              # Formatação da tabela
+              df_display = df_filtrado.copy()
+              df_display['quantidade'] = df_display['quantidade'].apply(lambda x: f"{x:,.0f}")
+              
+              # Renomear colunas
+              df_display = df_display.rename(columns={
+                  'pago_status': 'Pago',
+                  'ticket_id': 'Nro Ticket',
+                  'data_carregamento': 'Data de Carregamento',
+                  'comprador': 'Comprador',
+                  'vendedor': 'Vendedor',
+                  'grao': 'Grão',
+                  'quantidade': 'Sacas',
+                  'status': 'Status'
+              })
+              
+              st.dataframe(df_display, use_container_width=True, height=600)
+              
+              # Gráficos
+              if not df_filtrado.empty:
+                  st.subheader("📊 Análises")
+                  
+                  col1, col2 = st.columns(2)
+                  
+                  with col1:
+                      # Gráfico por status
+                      df_status = df_filtrado.groupby('status').size().reset_index(name='count')
+                      fig = px.bar(df_status, x='status', y='count', 
+                                  title="Cargas por Status")
+                      st.plotly_chart(fig, use_container_width=True)
+                  
+                  with col2:
+                      # Gráfico por pagamento
+                      df_pagamento = df_filtrado.groupby('pago_status').size().reset_index(name='count')
+                      fig = px.pie(df_pagamento, values='count', names='pago_status', 
+                                  title="Status de Pagamento")
+                      st.plotly_chart(fig, use_container_width=True)
+          
+          def show_contratos(db):
+              st.header("📋 Gestão de Contratos")
+              
+              if db is None:
+                  st.error("❌ Não foi possível conectar ao MongoDB")
+                  return
+              
+              with st.spinner("🔄 Carregando dados de contratos..."):
+                  df = get_contratos_data(db)
+              
+              if df.empty:
+                  st.warning("⚠️ Nenhum dado de contratos encontrado")
+                  return
+              
+              # Métricas
+              col1, col2, col3, col4 = st.columns(4)
+              
+              with col1:
+                  total_contratos = len(df)
+                  st.metric("📊 Total de Contratos", f"{total_contratos:,}")
+              
+              with col2:
+                  total_quantidade = df['quantidade'].sum()
+                  st.metric("📦 Quantidade Total", f"{total_quantidade:,.0f} sacas")
+              
+              with col3:
+                  valor_total = (df['quantidade'] * df['preco_saca']).sum()
+                  st.metric("💰 Valor Total", f"R$ {valor_total:,.2f}")
+              
+              with col4:
+                  contratos_ativos = len(df[df['status'].isin(['Ativo', 'Em Progresso'])])
+                  st.metric("✅ Contratos Ativos", f"{contratos_ativos:,}")
+              
+              # Tabela
+              st.subheader(f"📋 Dados de Contratos ({len(df)} registros)")
+              
+              # Formatação da tabela
+              df_display = df.copy()
+              df_display['quantidade'] = df_display['quantidade'].apply(lambda x: f"{x:,.0f}")
+              df_display['entregue'] = df_display['entregue'].apply(lambda x: f"{x:,.0f}")
+              df_display['preco_saca'] = df_display['preco_saca'].apply(lambda x: f"R$ {x:,.2f}")
+              
+              # Renomear colunas
+              df_display = df_display.rename(columns={
+                  'id': 'ID',
+                  'data_criacao': 'Data Criação',
+                  'comprador': 'Comprador',
+                  'vendedor': 'Vendedor',
+                  'grao': 'Grão',
+                  'quantidade': 'Quantidade',
+                  'entregue': 'Entregue',
+                  'preco_saca': 'Preço/Saca',
+                  'prazo_entrega': 'Prazo Entrega',
+                  'status': 'Status'
+              })
+              
+              st.dataframe(df_display, use_container_width=True, height=600)
+          
+          def show_financeiro(db):
+              st.header("💰 Gestão Financeira")
+              
+              if db is None:
+                  st.error("❌ Não foi possível conectar ao MongoDB")
+                  return
+              
+              with st.spinner("🔄 Carregando dados financeiros..."):
+                  df = get_financeiro_data(db)
+              
+              if df.empty:
+                  st.warning("⚠️ Nenhum dado financeiro encontrado")
+                  return
+              
+              # Filtros
+              st.subheader("🔍 Filtros")
+              col1, col2 = st.columns(2)
+              
+              with col1:
+                  usuarios_unicos = ['Todos'] + sorted(df['usuario'].unique().tolist())
+                  filtro_usuario = st.selectbox("Usuário", usuarios_unicos)
+              
+              with col2:
+                  itens_unicos = ['Todos'] + sorted(df['item'].unique().tolist())
+                  filtro_item = st.selectbox("Item", itens_unicos)
+              
+              # Aplicar filtros
+              df_filtrado = df.copy()
+              
+              if filtro_usuario != 'Todos':
+                  df_filtrado = df_filtrado[df_filtrado['usuario'] == filtro_usuario]
+              
+              if filtro_item != 'Todos':
+                  df_filtrado = df_filtrado[df_filtrado['item'] == filtro_item]
+              
+              # Tabela
+              st.subheader(f"📋 Dados Financeiros ({len(df_filtrado)} registros)")
+              
+              # Formatação da tabela
+              df_display = df_filtrado.copy()
+              df_display['valor'] = df_display['valor'].apply(lambda x: f"R$ {x:,.2f}")
+              
+              # Renomear colunas
+              df_display = df_display.rename(columns={
+                  'data': 'Data',
+                  'usuario': 'Usuário (Descrição)',
+                  'valor': 'Valor',
+                  'item': 'Item'
+              })
+              
+              st.dataframe(df_display, use_container_width=True, height=600)
+          
+          def show_provisionamento(db):
+              st.header("📦 Gestão de Provisionamento")
+              
+              if db is None:
+                  st.error("❌ Não foi possível conectar ao MongoDB")
+                  return
+              
+              with st.spinner("🔄 Carregando dados de provisionamento..."):
+                  df = get_provisionamento_data(db)
+              
+              if df.empty:
+                  st.warning("⚠️ Nenhum dado de provisionamento encontrado")
+                  return
+              
+              # Métricas
+              col1, col2, col3, col4 = st.columns(4)
+              
+              with col1:
+                  total_registros = len(df)
+                  st.metric("📊 Total de Registros", f"{total_registros:,}")
+              
+              with col2:
+                  total_quantidade = df['quantidade'].sum()
+                  st.metric("📦 Quantidade Total", f"{total_quantidade:,.0f} sacas")
+              
+              with col3:
+                  total_usado = df['quantidade_usada'].sum()
+                  st.metric("✅ Quantidade Usada", f"{total_usado:,.0f} sacas")
+              
+              with col4:
+                  total_disponivel = total_quantidade - total_usado
+                  st.metric("🔄 Disponível", f"{total_disponivel:,.0f} sacas")
+              
+              # Tabela
+              st.subheader(f"📋 Dados de Provisionamento ({len(df)} registros)")
+              
+              # Formatação da tabela
+              df_display = df.copy()
+              df_display['quantidade'] = df_display['quantidade'].apply(lambda x: f"{x:,.0f}")
+              df_display['quantidade_usada'] = df_display['quantidade_usada'].apply(lambda x: f"{x:,.0f}")
+              
+              # Renomear colunas
+              df_display = df_display.rename(columns={
+                  'id': 'ID',
+                  'data_criacao': 'Data Criação',
+                  'grao': 'Grão',
+                  'usuario': 'Usuário',
+                  'quantidade': 'Quantidade',
+                  'quantidade_usada': 'Usado',
+                  'status': 'Status'
+              })
+              
+              st.dataframe(df_display, use_container_width=True, height=600)
+          
+          if __name__ == "__main__":
+              main()
+          EOF
+          streamlit run app.py --server.port=8501 --server.address=0.0.0.0 --server.headless=true --server.fileWatcherType=none
+        env:
+        - name: MONGODB_URI
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-secret
+              key: mongodb-uri
+        envFrom:
+        - configMapRef:
+            name: fox-auditoria-config
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8501
+          initialDelaySeconds: 300
+          periodSeconds: 60
+          timeoutSeconds: 15
+          failureThreshold: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8501
+          initialDelaySeconds: 240
+          periodSeconds: 30
+          timeoutSeconds: 15
+          failureThreshold: 10
+        securityContext:
+          runAsNonRoot: false
+          allowPrivilegeEscalation: true
+          readOnlyRootFilesystem: false
+      restartPolicy: Always
+

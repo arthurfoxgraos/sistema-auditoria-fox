@@ -1,0 +1,70 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fox-app-main
+  namespace: fox-auditoria
+data:
+  app.py: |
+    import streamlit as st
+    import sys
+    import os
+    
+    # Adicionar diretório pages ao path
+    sys.path.append('/app/pages')
+    
+    st.set_page_config(
+        page_title="Sistema FOX - Auditoria",
+        page_icon="🚛",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
+    
+    st.markdown("""
+    <style>
+        .main-header {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #1f77b4;
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .metric-card {
+            background-color: #f0f2f6;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            border-left: 4px solid #1f77b4;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    def main():
+        st.markdown('<h1 class="main-header">🚛 Sistema FOX - Auditoria Completa</h1>', unsafe_allow_html=True)
+        
+        st.sidebar.title("📊 Navegação")
+        
+        page = st.sidebar.selectbox(
+            "Selecione uma página:",
+            [
+                "🚚 Cargas", 
+                "📦 Provisionamento",
+                "💰 Financeiro",
+                "📋 Contratos"
+            ]
+        )
+        
+        if page == "🚚 Cargas":
+            from cargas import show_cargas_page
+            show_cargas_page()
+        elif page == "📦 Provisionamento":
+            from provisionamento import show_provisionamento_page
+            show_provisionamento_page()
+        elif page == "💰 Financeiro":
+            from financeiro import show_financeiro_page
+            show_financeiro_page()
+        elif page == "📋 Contratos":
+            from contratos import show_contratos_page
+            show_contratos_page()
+    
+    if __name__ == "__main__":
+        main()
+

@@ -1,0 +1,305 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fox-page-cargas
+  namespace: fox-auditoria
+data:
+  cargas.py: |
+    import streamlit as st
+    import pandas as pd
+    import plotly.express as px
+    from datetime import datetime, timedelta
+    import pymongo
+    import os
+    from bson import ObjectId
+    
+    @st.cache_resource
+    def init_mongodb():
+        try:
+            mongodb_uri = os.getenv('MONGODB_URI')
+            if not mongodb_uri:
+                st.error("❌ MONGODB_URI não configurado")
+                return None
+            
+            client = pymongo.MongoClient(mongodb_uri)
+            db = client.fox
+            
+            # Testar conexão
+            client.admin.command('ping')
+            return db
+        except Exception as e:
+            st.error(f"❌ Erro ao conectar MongoDB: {str(e)}")
+            return None
+    
+    @st.cache_data(ttl=60)
+    def get_cargas_data():
+        try:
+            db = init_mongodb()
+            if db is None:
+                return pd.DataFrame()
+            
+            # Pipeline para buscar dados de cargas
+            pipeline = [
+                {"$match": {"createdAt": {"$gte": datetime(2025, 1, 1)}, "status": {"$ne": "Cancelado"}}},
+                {
+                    "$lookup": {
+                        "from": "orderv2",
+                        "localField": "destinationOrder",
+                        "foreignField": "_id",
+                        "as": "destination_info"
+                    }
+                },
+                {
+                    "$lookup": {
+                        "from": "orderv2",
+                        "localField": "originOrder", 
+                        "foreignField": "_id",
+                        "as": "origin_info"
+                    }
+                },
+                {
+                    "$lookup": {
+                        "from": "users",
+                        "localField": "destination_info.buyer",
+                        "foreignField": "_id",
+                        "as": "buyer_info"
+                    }
+                },
+                {
+                    "$lookup": {
+                        "from": "users",
+                        "localField": "origin_info.seller",
+                        "foreignField": "_id", 
+                        "as": "seller_info"
+                    }
+                },
+                {
+                    "$lookup": {
+                        "from": "grains",
+                        "localField": "destination_info.grain",
+                        "foreignField": "_id",
+                        "as": "grain_info"
+                    }
+                },
+                {
+                    "$project": {
+                        "_id": 1,
+                        "amount": 1,
+                        "loadingDate": 1,
+                        "status": 1,
+                        "paid": 1,
+                        "createdAt": 1,
+                        "buyer_name": {"$arrayElemAt": ["$buyer_info.name", 0]},
+                        "seller_name": {"$arrayElemAt": ["$seller_info.name", 0]},
+                        "grain_name": {"$arrayElemAt": ["$grain_info.name", 0]},
+                        "paid_status": {
+                            "$cond": {
+                                "if": {"$eq": ["$paid", True]},
+                                "then": "✅",
+                                "else": "⏰"
+                            }
+                        },
+                        "contract_type": {
+                            "$cond": {
+                                "if": {"$ne": ["$originOrder", None]},
+                                "then": "🌾 Grão",
+                                "else": "🚛 Frete"
+                            }
+                        }
+                    }
+                },
+                {"$sort": {"loadingDate": -1}},
+                {"$limit": 1000}
+            ]
+            
+            results = list(db.ticketv2.aggregate(pipeline))
+            
+            if not results:
+                return pd.DataFrame()
+            
+            # Converter para DataFrame
+            df = pd.DataFrame(results)
+            
+            # Processar dados
+            df['ticket_id'] = df['_id'].astype(str)
+            df['data_carregamento'] = pd.to_datetime(df['loadingDate']).dt.strftime('%d/%m/%Y')
+            df['comprador'] = df['buyer_name'].fillna('N/A')
+            df['vendedor'] = df['seller_name'].fillna('N/A')
+            df['caminhoneiro'] = 'N/A'  # Placeholder
+            df['grao'] = df['grain_name'].fillna('N/A')
+            df['tipo_contrato'] = df['contract_type'].fillna('❓ Indefinido')
+            df['quantidade'] = df['amount'].fillna(0)
+            df['receita'] = df['amount'].fillna(0) * 50  # Placeholder
+            df['custo'] = df['amount'].fillna(0) * 30   # Placeholder
+            df['frete'] = df['amount'].fillna(0) * 10   # Placeholder
+            df['lucro_bruto'] = df['receita'] - df['custo'] - df['frete']
+            df['status'] = df['status'].fillna('Indefinido')
+            
+            return df
+            
+        except Exception as e:
+            st.error(f"❌ Erro ao buscar dados de cargas: {str(e)}")
+            return pd.DataFrame()
+    
+    def show_cargas_page():
+        st.header("🚚 Gestão de Cargas")
+        
+        # Buscar dados
+        with st.spinner("🔄 Carregando dados de cargas..."):
+            df = get_cargas_data()
+        
+        if df.empty:
+            st.warning("⚠️ Nenhum dado de cargas encontrado")
+            return
+        
+        # Métricas
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            total_cargas = len(df)
+            finalizadas = len(df[df['status'].isin(['Finalizado', 'Concluído'])])
+            st.metric("📊 Total de Cargas", f"{total_cargas:,}", f"↗ {finalizadas} finalizadas")
+        
+        with col2:
+            total_quantidade = df['quantidade'].sum()
+            st.metric("📦 Quantidade Total", f"{total_quantidade:,.0f} sacas")
+        
+        with col3:
+            valor_total_frete = df['frete'].sum()
+            st.metric("💰 Valor Total Frete", f"R$ {valor_total_frete:,.2f}")
+        
+        with col4:
+            cargas_por_quantidade = total_cargas / total_quantidade if total_quantidade > 0 else 0
+            percentual_finalizadas = (finalizadas / total_cargas * 100) if total_cargas > 0 else 0
+            st.metric("📈 Cargas/Quantidade", f"{cargas_por_quantidade:.0f}", f"↗ {percentual_finalizadas:.1f}%")
+        
+        # Filtros
+        st.subheader("🔍 Filtros")
+        col1, col2, col3, col4, col5 = st.columns(5)
+        
+        with col1:
+            status_unicos = ['Todos'] + sorted(df['status'].unique().tolist())
+            filtro_status = st.selectbox("Status", status_unicos)
+        
+        with col2:
+            pagamento_opcoes = ['Todos', '✅ Pago', '⏰ Não Pago']
+            filtro_pagamento = st.selectbox("Status Pagamento", pagamento_opcoes)
+        
+        with col3:
+            data_min = datetime.now() - timedelta(days=30)
+            data_max = datetime.now()
+            filtro_data = st.date_input(
+                "Intervalo de datas",
+                value=(data_min.date(), data_max.date()),
+                format="DD/MM/YYYY"
+            )
+        
+        with col4:
+            tipos_contrato = ['Todos'] + sorted(df['tipo_contrato'].unique().tolist())
+            filtro_tipo = st.selectbox("Tipo de Contrato", tipos_contrato)
+        
+        with col5:
+            compradores_unicos = ['Todos'] + sorted(df['comprador'].unique().tolist())
+            filtro_comprador = st.selectbox("Comprador", compradores_unicos)
+        
+        # Aplicar filtros
+        df_filtrado = df.copy()
+        
+        if filtro_status != 'Todos':
+            df_filtrado = df_filtrado[df_filtrado['status'] == filtro_status]
+        
+        if filtro_pagamento == '✅ Pago':
+            df_filtrado = df_filtrado[df_filtrado['paid_status'] == '✅']
+        elif filtro_pagamento == '⏰ Não Pago':
+            df_filtrado = df_filtrado[df_filtrado['paid_status'] == '⏰']
+        
+        if filtro_tipo != 'Todos':
+            df_filtrado = df_filtrado[df_filtrado['tipo_contrato'] == filtro_tipo]
+        
+        if filtro_comprador != 'Todos':
+            df_filtrado = df_filtrado[df_filtrado['comprador'] == filtro_comprador]
+        
+        # Totalizadores dos resultados filtrados
+        st.subheader(f"📊 Resultados: {len(df_filtrado)} cargas (apenas 2025+)")
+        
+        col1, col2, col3, col4, col5 = st.columns(5)
+        
+        with col1:
+            receita_total = df_filtrado['receita'].sum()
+            st.metric("💰 Receita Total", f"R$ {receita_total:,.2f}")
+        
+        with col2:
+            custo_total = df_filtrado['custo'].sum()
+            st.metric("💸 Custo Total", f"R$ {custo_total:,.2f}")
+        
+        with col3:
+            frete_total = df_filtrado['frete'].sum()
+            st.metric("🚛 Frete Total", f"R$ {frete_total:,.2f}")
+        
+        with col4:
+            lucro_bruto_total = df_filtrado['lucro_bruto'].sum()
+            margem = (lucro_bruto_total / receita_total * 100) if receita_total > 0 else 0
+            st.metric("📈 Lucro Bruto Total", f"R$ {lucro_bruto_total:,.2f}", f"↗ {margem:.2f}%")
+        
+        with col5:
+            total_sacas = df_filtrado['quantidade'].sum()
+            st.metric("📦 Total Sacas", f"{total_sacas:,.0f}")
+        
+        # Tabela
+        st.subheader("📋 Tabela de Cargas")
+        
+        # Formatação da tabela
+        df_display = df_filtrado.copy()
+        df_display['quantidade'] = df_display['quantidade'].apply(lambda x: f"{x:,.0f}")
+        df_display['receita'] = df_display['receita'].apply(lambda x: f"R$ {x:,.2f}")
+        df_display['custo'] = df_display['custo'].apply(lambda x: f"R$ {x:,.2f}")
+        df_display['frete'] = df_display['frete'].apply(lambda x: f"R$ {x:,.2f}")
+        df_display['lucro_bruto'] = df_display['lucro_bruto'].apply(lambda x: f"R$ {x:,.2f}")
+        
+        # Selecionar e renomear colunas
+        colunas_exibir = [
+            'paid_status', 'ticket_id', 'data_carregamento', 'comprador', 'vendedor', 
+            'caminhoneiro', 'grao', 'tipo_contrato', 'status', 'quantidade', 
+            'receita', 'custo', 'frete', 'lucro_bruto'
+        ]
+        
+        df_display = df_display[colunas_exibir].rename(columns={
+            'paid_status': 'Pago',
+            'ticket_id': 'Nro Ticket',
+            'data_carregamento': 'Data de Carregamento',
+            'comprador': 'Comprador',
+            'vendedor': 'Vendedor',
+            'caminhoneiro': 'Caminhoneiro',
+            'grao': 'Grão',
+            'tipo_contrato': 'Tipo Contrato',
+            'status': 'Status',
+            'quantidade': 'Sacas',
+            'receita': 'Receita',
+            'custo': 'Custo',
+            'frete': 'Frete',
+            'lucro_bruto': 'Lucro Bruto'
+        })
+        
+        st.dataframe(df_display, use_container_width=True, height=600)
+        
+        # Gráficos
+        if not df_filtrado.empty:
+            st.subheader("📊 Análises")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Gráfico por status
+                df_status = df_filtrado.groupby('status').size().reset_index(name='count')
+                fig = px.bar(df_status, x='status', y='count', 
+                            title="📊 Distribuição por Status")
+                st.plotly_chart(fig, use_container_width=True)
+            
+            with col2:
+                # Gráfico por data
+                df_filtrado['mes'] = pd.to_datetime(df_filtrado['loadingDate']).dt.strftime('%Y-%m')
+                df_data = df_filtrado.groupby('mes').size().reset_index(name='count')
+                fig = px.line(df_data, x='mes', y='count', 
+                             title="📅 Cargas por Data")
+                st.plotly_chart(fig, use_container_width=True)
+

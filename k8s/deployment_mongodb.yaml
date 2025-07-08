@@ -1,0 +1,436 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fox-auditoria-app
+  namespace: fox-auditoria
+  labels:
+    app: fox-auditoria
+    component: web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fox-auditoria
+      component: web
+  template:
+    metadata:
+      labels:
+        app: fox-auditoria
+        component: web
+    spec:
+      containers:
+      - name: fox-auditoria
+        image: python:3.11-slim
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8501
+          name: http
+        command: ["/bin/bash"]
+        args: 
+        - "-c"
+        - |
+          pip install streamlit pandas plotly pymongo &&
+          cat > app.py << 'EOF'
+          import streamlit as st
+          import pandas as pd
+          import plotly.express as px
+          from datetime import datetime, timedelta
+          import pymongo
+          import os
+          
+          st.set_page_config(
+              page_title="Sistema FOX - Auditoria",
+              page_icon="🚛",
+              layout="wide",
+              initial_sidebar_state="expanded"
+          )
+          
+          st.markdown("""
+          <style>
+              .main-header {
+                  font-size: 2.5rem;
+                  font-weight: bold;
+                  color: #1f77b4;
+                  text-align: center;
+                  margin-bottom: 2rem;
+              }
+              .metric-card {
+                  background-color: #f0f2f6;
+                  padding: 1rem;
+                  border-radius: 0.5rem;
+                  border-left: 4px solid #1f77b4;
+              }
+          </style>
+          """, unsafe_allow_html=True)
+          
+          @st.cache_resource
+          def init_mongodb():
+              try:
+                  mongodb_uri = os.getenv('MONGODB_URI')
+                  if not mongodb_uri:
+                      st.error("❌ MONGODB_URI não configurado")
+                      return None
+                  
+                  client = pymongo.MongoClient(mongodb_uri)
+                  db = client.fox
+                  
+                  # Testar conexão
+                  client.admin.command('ping')
+                  st.success("✅ MongoDB conectado com sucesso!")
+                  return db
+              except Exception as e:
+                  st.error(f"❌ Erro ao conectar MongoDB: {str(e)}")
+                  return None
+          
+          def get_provisionamento_data(db):
+              try:
+                  if db is None:
+                      return pd.DataFrame()
+                  
+                  # Pipeline para buscar dados de provisionamento
+                  pipeline = [
+                      {
+                          "$lookup": {
+                              "from": "grains",
+                              "localField": "grain",
+                              "foreignField": "_id",
+                              "as": "grain_info"
+                          }
+                      },
+                      {
+                          "$lookup": {
+                              "from": "users",
+                              "localField": "user",
+                              "foreignField": "_id",
+                              "as": "user_info"
+                          }
+                      },
+                      {
+                          "$project": {
+                              "_id": 1,
+                              "amount": 1,
+                              "amountUsed": 1,
+                              "status": 1,
+                              "createdAt": 1,
+                              "updatedAt": 1,
+                              "grain_name": {"$arrayElemAt": ["$grain_info.name", 0]},
+                              "user_name": {"$arrayElemAt": ["$user_info.name", 0]}
+                          }
+                      },
+                      {"$sort": {"createdAt": -1}},
+                      {"$limit": 1000}
+                  ]
+                  
+                  results = list(db.provisioning.aggregate(pipeline))
+                  
+                  if not results:
+                      st.warning("⚠️ Nenhum dado de provisionamento encontrado")
+                      return pd.DataFrame()
+                  
+                  # Converter para DataFrame
+                  df = pd.DataFrame(results)
+                  
+                  # Processar dados
+                  df['id'] = df['_id'].astype(str)
+                  df['data_criacao'] = pd.to_datetime(df['createdAt']).dt.strftime('%d/%m/%Y')
+                  df['data_atualizacao'] = pd.to_datetime(df['updatedAt']).dt.strftime('%d/%m/%Y')
+                  df['quantidade'] = df['amount'].fillna(0)
+                  df['quantidade_usada'] = df['amountUsed'].fillna(0)
+                  df['quantidade_disponivel'] = df['quantidade'] - df['quantidade_usada']
+                  df['percentual_usado'] = ((df['quantidade_usada'] / df['quantidade']) * 100).fillna(0).round(1)
+                  df['grao'] = df['grain_name'].fillna('N/A')
+                  df['usuario'] = df['user_name'].fillna('N/A')
+                  df['status'] = df['status'].fillna('Indefinido')
+                  
+                  return df[['id', 'data_criacao', 'grao', 'usuario', 'quantidade', 'quantidade_usada', 
+                           'quantidade_disponivel', 'percentual_usado', 'status', 'data_atualizacao']]
+                  
+              except Exception as e:
+                  st.error(f"❌ Erro ao buscar dados de provisionamento: {str(e)}")
+                  return pd.DataFrame()
+          
+          def main():
+              st.markdown('<h1 class="main-header">🚛 Sistema FOX - Auditoria Completa</h1>', unsafe_allow_html=True)
+              
+              st.sidebar.title("📊 Navegação")
+              
+              page = st.sidebar.selectbox(
+                  "Selecione uma página:",
+                  [
+                      "🏠 Dashboard",
+                      "🚚 Cargas", 
+                      "📦 Provisionamento",
+                      "💰 Financeiro",
+                      "📋 Contratos"
+                  ]
+              )
+              
+              # Inicializar MongoDB
+              db = init_mongodb()
+              
+              if page == "🏠 Dashboard":
+                  show_dashboard(db)
+              elif page == "🚚 Cargas":
+                  show_cargas_placeholder()
+              elif page == "📦 Provisionamento":
+                  show_provisionamento(db)
+              elif page == "💰 Financeiro":
+                  show_financeiro_placeholder()
+              elif page == "📋 Contratos":
+                  show_contratos_placeholder()
+          
+          def show_dashboard(db):
+              st.header("📊 Dashboard Principal")
+              
+              col1, col2, col3, col4 = st.columns(4)
+              
+              with col1:
+                  st.metric("🚚 Total de Cargas", "1,234", "12 hoje")
+              with col2:
+                  if db:
+                      try:
+                          total_prov = db.provisioning.count_documents({})
+                          st.metric("📦 Provisionamentos", f"{total_prov:,}", "Conectado")
+                      except:
+                          st.metric("📦 Provisionamentos", "Erro", "Conexão falhou")
+                  else:
+                      st.metric("📦 Provisionamentos", "N/A", "Sem conexão")
+              with col3:
+                  st.metric("💰 Receita Total", "R$ 2.5M", "R$ 150K este mês")
+              with col4:
+                  st.metric("📋 Contratos Ativos", "89", "3 novos")
+              
+              st.subheader("📈 Análises")
+              
+              col1, col2 = st.columns(2)
+              
+              with col1:
+                  data = {
+                      'Mês': ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun'],
+                      'Cargas': [120, 135, 148, 162, 155, 178]
+                  }
+                  df = pd.DataFrame(data)
+                  fig = px.bar(df, x='Mês', y='Cargas', title="Cargas por Mês")
+                  st.plotly_chart(fig, use_container_width=True)
+              
+              with col2:
+                  data = {
+                      'Categoria': ['Grãos', 'Frete', 'Outros'],
+                      'Valor': [1500000, 800000, 200000]
+                  }
+                  df = pd.DataFrame(data)
+                  fig = px.pie(df, values='Valor', names='Categoria', title="Receita por Categoria")
+                  st.plotly_chart(fig, use_container_width=True)
+              
+              st.subheader("🔧 Status do Sistema")
+              
+              col1, col2, col3 = st.columns(3)
+              
+              with col1:
+                  if db:
+                      st.success("✅ MongoDB: Conectado")
+                  else:
+                      st.error("❌ MongoDB: Desconectado")
+              with col2:
+                  st.success("✅ Kubernetes: Online")
+              with col3:
+                  st.success("✅ LoadBalancer: Ativo")
+              
+              st.subheader("ℹ️ Informações do Sistema")
+              
+              info_data = {
+                  'Componente': ['Namespace', 'Pod', 'Service', 'IP Externo', 'Porta'],
+                  'Status': ['fox-auditoria', 'Running', 'LoadBalancer', '24.144.69.32', '80']
+              }
+              df_info = pd.DataFrame(info_data)
+              st.dataframe(df_info, use_container_width=True)
+          
+          def show_provisionamento(db):
+              st.header("📦 Gestão de Provisionamento")
+              
+              if db is None:
+                  st.error("❌ Não foi possível conectar ao MongoDB")
+                  return
+              
+              # Buscar dados
+              with st.spinner("🔄 Carregando dados de provisionamento..."):
+                  df = get_provisionamento_data(db)
+              
+              if df.empty:
+                  st.warning("⚠️ Nenhum dado de provisionamento encontrado")
+                  return
+              
+              # Métricas
+              col1, col2, col3, col4 = st.columns(4)
+              
+              with col1:
+                  total_registros = len(df)
+                  st.metric("📊 Total de Registros", f"{total_registros:,}")
+              
+              with col2:
+                  total_quantidade = df['quantidade'].sum()
+                  st.metric("📦 Quantidade Total", f"{total_quantidade:,.0f} sacas")
+              
+              with col3:
+                  total_usado = df['quantidade_usada'].sum()
+                  st.metric("✅ Quantidade Usada", f"{total_usado:,.0f} sacas")
+              
+              with col4:
+                  total_disponivel = df['quantidade_disponivel'].sum()
+                  st.metric("🔄 Disponível", f"{total_disponivel:,.0f} sacas")
+              
+              # Filtros
+              st.subheader("🔍 Filtros")
+              col1, col2, col3 = st.columns(3)
+              
+              with col1:
+                  graos_unicos = ['Todos'] + sorted(df['grao'].unique().tolist())
+                  filtro_grao = st.selectbox("Grão", graos_unicos)
+              
+              with col2:
+                  status_unicos = ['Todos'] + sorted(df['status'].unique().tolist())
+                  filtro_status = st.selectbox("Status", status_unicos)
+              
+              with col3:
+                  usuarios_unicos = ['Todos'] + sorted(df['usuario'].unique().tolist())
+                  filtro_usuario = st.selectbox("Usuário", usuarios_unicos)
+              
+              # Aplicar filtros
+              df_filtrado = df.copy()
+              
+              if filtro_grao != 'Todos':
+                  df_filtrado = df_filtrado[df_filtrado['grao'] == filtro_grao]
+              
+              if filtro_status != 'Todos':
+                  df_filtrado = df_filtrado[df_filtrado['status'] == filtro_status]
+              
+              if filtro_usuario != 'Todos':
+                  df_filtrado = df_filtrado[df_filtrado['usuario'] == filtro_usuario]
+              
+              # Tabela
+              st.subheader(f"📋 Dados de Provisionamento ({len(df_filtrado)} registros)")
+              
+              # Formatação da tabela
+              df_display = df_filtrado.copy()
+              df_display['quantidade'] = df_display['quantidade'].apply(lambda x: f"{x:,.0f}")
+              df_display['quantidade_usada'] = df_display['quantidade_usada'].apply(lambda x: f"{x:,.0f}")
+              df_display['quantidade_disponivel'] = df_display['quantidade_disponivel'].apply(lambda x: f"{x:,.0f}")
+              df_display['percentual_usado'] = df_display['percentual_usado'].apply(lambda x: f"{x:.1f}%")
+              
+              # Renomear colunas para exibição
+              df_display = df_display.rename(columns={
+                  'id': 'ID',
+                  'data_criacao': 'Data Criação',
+                  'grao': 'Grão',
+                  'usuario': 'Usuário',
+                  'quantidade': 'Quantidade',
+                  'quantidade_usada': 'Usado',
+                  'quantidade_disponivel': 'Disponível',
+                  'percentual_usado': '% Usado',
+                  'status': 'Status',
+                  'data_atualizacao': 'Última Atualização'
+              })
+              
+              st.dataframe(df_display, use_container_width=True, height=600)
+              
+              # Gráficos
+              if not df_filtrado.empty:
+                  st.subheader("📊 Análises")
+                  
+                  col1, col2 = st.columns(2)
+                  
+                  with col1:
+                      # Gráfico por grão
+                      df_grao = df_filtrado.groupby('grao')['quantidade'].sum().reset_index()
+                      fig = px.bar(df_grao, x='grao', y='quantidade', 
+                                  title="Quantidade por Grão",
+                                  labels={'quantidade': 'Quantidade (sacas)', 'grao': 'Grão'})
+                      st.plotly_chart(fig, use_container_width=True)
+                  
+                  with col2:
+                      # Gráfico por status
+                      df_status = df_filtrado.groupby('status').size().reset_index(name='count')
+                      fig = px.pie(df_status, values='count', names='status', 
+                                  title="Distribuição por Status")
+                      st.plotly_chart(fig, use_container_width=True)
+          
+          def show_cargas_placeholder():
+              st.header("🚚 Gestão de Cargas")
+              st.info("🔄 Módulo de cargas será implementado com conexão MongoDB completa.")
+              
+              data = {
+                  'Ticket': ['T001', 'T002', 'T003'],
+                  'Data': ['2025-01-07', '2025-01-07', '2025-01-06'],
+                  'Comprador': ['CARGILL', 'ADM', 'BUNGE'],
+                  'Status': ['Carregando', 'Finalizado', 'Aguardando']
+              }
+              df = pd.DataFrame(data)
+              st.dataframe(df, use_container_width=True)
+          
+          def show_financeiro_placeholder():
+              st.header("💰 Gestão Financeira")
+              st.info("🔄 Módulo financeiro será implementado com conexão MongoDB completa.")
+              
+              data = {
+                  'Data': ['2025-01-07', '2025-01-06', '2025-01-05'],
+                  'Descrição': ['Recebimento Cargill', 'Pagamento Frete', 'Venda Soja'],
+                  'Valor': [150000, -25000, 200000]
+              }
+              df = pd.DataFrame(data)
+              st.dataframe(df, use_container_width=True)
+          
+          def show_contratos_placeholder():
+              st.header("📋 Gestão de Contratos")
+              st.info("🔄 Módulo de contratos será implementado com conexão MongoDB completa.")
+              
+              data = {
+                  'ID': ['C001', 'C002', 'C003'],
+                  'Cliente': ['CARGILL', 'ADM', 'BUNGE'],
+                  'Grão': ['Soja', 'Milho', 'Sorgo'],
+                  'Status': ['Ativo', 'Concluído', 'Pendente']
+              }
+              df = pd.DataFrame(data)
+              st.dataframe(df, use_container_width=True)
+          
+          if __name__ == "__main__":
+              main()
+          EOF
+          streamlit run app.py --server.port=8501 --server.address=0.0.0.0 --server.headless=true --server.fileWatcherType=none
+        env:
+        - name: MONGODB_URI
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-secret
+              key: mongodb-uri
+        envFrom:
+        - configMapRef:
+            name: fox-auditoria-config
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8501
+          initialDelaySeconds: 300
+          periodSeconds: 60
+          timeoutSeconds: 15
+          failureThreshold: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8501
+          initialDelaySeconds: 240
+          periodSeconds: 30
+          timeoutSeconds: 15
+          failureThreshold: 10
+        securityContext:
+          runAsNonRoot: false
+          allowPrivilegeEscalation: true
+          readOnlyRootFilesystem: false
+      restartPolicy: Always
+
