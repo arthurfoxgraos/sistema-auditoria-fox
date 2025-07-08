@@ -165,7 +165,7 @@ def show_cargas_page():
     
     # Filtros
     st.subheader("🔍 Filtros")
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
         if 'status' in df_tickets.columns:
@@ -175,6 +175,15 @@ def show_cargas_page():
             status_filter = "Todos"
     
     with col2:
+        # Filtro por status de pagamento
+        payment_options = ["Todos", "✅ Pago", "⏰ Não Pago"]
+        payment_filter = st.selectbox(
+            "Status Pagamento:",
+            options=payment_options,
+            key="payment_filter"
+        )
+    
+    with col3:
         # Filtro por intervalo de datas
         if 'loadingDate' in df_tickets.columns:
             df_tickets['loadingDate'] = pd.to_datetime(df_tickets['loadingDate'], errors='coerce')
@@ -191,7 +200,7 @@ def show_cargas_page():
         else:
             date_range = None
     
-    with col3:
+    with col4:
         # Filtro por tipo de contrato
         contract_types = ["Todos"]
         if 'contract_type' in df_tickets.columns:
@@ -204,11 +213,18 @@ def show_cargas_page():
             key="contract_filter"
         )
     
-    with col4:
-        if 'seller_name' in df_tickets.columns or 'buyer_name' in df_tickets.columns:
-            user_filter = st.text_input("Filtrar por vendedor/comprador:")
-        else:
-            user_filter = ""
+    with col5:
+        # Filtro por comprador
+        buyer_options = ["Todos"]
+        if 'buyer_name' in df_tickets.columns:
+            unique_buyers = df_tickets['buyer_name'].dropna().unique()
+            buyer_options.extend(sorted(unique_buyers))
+        
+        buyer_filter = st.selectbox(
+            "Comprador:",
+            options=buyer_options,
+            key="buyer_filter"
+        )
     
     # Aplicar filtros
     df_filtered = df_tickets.copy()
@@ -216,6 +232,13 @@ def show_cargas_page():
     # Filtro por status
     if status_filter != "Todos" and 'status' in df_filtered.columns:
         df_filtered = df_filtered[df_filtered['status'] == status_filter]
+    
+    # Filtro por status de pagamento
+    if payment_filter != "Todos" and 'paid_status' in df_filtered.columns:
+        if payment_filter == "✅ Pago":
+            df_filtered = df_filtered[df_filtered['paid_status'] == "✅"]
+        elif payment_filter == "⏰ Não Pago":
+            df_filtered = df_filtered[df_filtered['paid_status'] == "⏰"]
     
     # Filtro por intervalo de datas
     if date_range and len(date_range) == 2 and 'loadingDate' in df_filtered.columns:
@@ -230,19 +253,9 @@ def show_cargas_page():
     if contract_filter != "Todos" and 'contract_type' in df_filtered.columns:
         df_filtered = df_filtered[df_filtered['contract_type'] == contract_filter]
     
-    # Filtro por usuário (vendedor/comprador)
-    if user_filter:
-        if 'seller_name' in df_filtered.columns:
-            mask1 = df_filtered['seller_name'].str.contains(user_filter, case=False, na=False)
-        else:
-            mask1 = pd.Series([False] * len(df_filtered))
-        
-        if 'buyer_name' in df_filtered.columns:
-            mask2 = df_filtered['buyer_name'].str.contains(user_filter, case=False, na=False)
-        else:
-            mask2 = pd.Series([False] * len(df_filtered))
-        
-        df_filtered = df_filtered[mask1 | mask2]
+    # Filtro por comprador
+    if buyer_filter != "Todos" and 'buyer_name' in df_filtered.columns:
+        df_filtered = df_filtered[df_filtered['buyer_name'] == buyer_filter]
     
     # Mostrar resultados
     st.subheader(f"📊 Resultados: {len(df_filtered)} cargas (apenas 2025+)")
