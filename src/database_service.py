@@ -101,7 +101,7 @@ class DatabaseService:
                     "transaction_value": {"$sum": "$transactions.value"}
                 }
             },
-            {"$sort": {"loadingDate": -1}},
+            {"$sort": {"ticket": -1}},
             {"$limit": limit}
         ]
         
