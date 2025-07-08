@@ -1,7 +1,13 @@
 """
 Serviço PostgreSQL para Sistema de Auditoria FOX
 """
-import psycopg2
+try:
+    import psycopg2
+    PSYCOPG2_AVAILABLE = True
+except ImportError:
+    PSYCOPG2_AVAILABLE = False
+    psycopg2 = None
+
 import pandas as pd
 from datetime import datetime
 import streamlit as st
@@ -9,10 +15,16 @@ import streamlit as st
 class PostgreSQLService:
     def __init__(self):
         self.connection = None
-        self.connect()
+        if PSYCOPG2_AVAILABLE:
+            self.connect()
+        else:
+            st.error("❌ psycopg2 não instalado. Execute: pip install psycopg2-binary")
     
     def connect(self):
         """Conecta ao PostgreSQL"""
+        if not PSYCOPG2_AVAILABLE:
+            return False
+            
         try:
             self.connection = psycopg2.connect(
                 host="24.199.75.66",
@@ -28,6 +40,9 @@ class PostgreSQLService:
     
     def create_tables(self):
         """Cria tabelas necessárias no PostgreSQL"""
+        if not PSYCOPG2_AVAILABLE or not self.connection:
+            return False
+            
         try:
             cursor = self.connection.cursor()
             
@@ -63,6 +78,9 @@ class PostgreSQLService:
     
     def get_cargas_data(self):
         """Busca dados de cargas do PostgreSQL"""
+        if not PSYCOPG2_AVAILABLE or not self.connection:
+            return pd.DataFrame()
+            
         try:
             query = """
                 SELECT 
@@ -107,6 +125,9 @@ class PostgreSQLService:
     
     def sync_from_mongodb(self, mongodb_data):
         """Sincroniza dados do MongoDB para PostgreSQL"""
+        if not PSYCOPG2_AVAILABLE or not self.connection:
+            return 0
+            
         try:
             cursor = self.connection.cursor()
             
@@ -162,6 +183,9 @@ class PostgreSQLService:
     
     def get_sync_stats(self):
         """Retorna estatísticas de sincronização"""
+        if not PSYCOPG2_AVAILABLE or not self.connection:
+            return {'total_cargas': 0, 'last_sync': None}
+            
         try:
             cursor = self.connection.cursor()
             
