@@ -123,6 +123,29 @@ class DatabaseService:
                     "is_freight_contract": {"$arrayElemAt": ["$origin_order_info.isFreight", 0]},
                     # Extrair amount do array transactions
                     "amount": {"$sum": "$transactions.amount"},
+                    # Valores de frete
+                    "freight_value_per_bag": "$freightValue",
+                    "total_freight_value": {
+                        "$multiply": [
+                            {"$ifNull": ["$freightValue", 0]},
+                            {"$sum": "$transactions.amount"}
+                        ]
+                    },
+                    # Valores de receita e custo
+                    "revenue_value": {
+                        "$multiply": [
+                            {"$ifNull": [{"$arrayElemAt": ["$destination_order_info.bagPrice", 0]}, 0]},
+                            {"$sum": "$transactions.amount"}
+                        ]
+                    },
+                    "cost_value": {
+                        "$multiply": [
+                            {"$ifNull": [{"$arrayElemAt": ["$origin_order_info.bagPrice", 0]}, 0]},
+                            {"$sum": "$transactions.amount"}
+                        ]
+                    },
+                    "destination_bag_price": {"$arrayElemAt": ["$destination_order_info.bagPrice", 0]},
+                    "origin_bag_price": {"$arrayElemAt": ["$origin_order_info.bagPrice", 0]},
                     "transaction_distance": {"$avg": "$transactions.distanceInKm"},
                     "transaction_value": {"$sum": "$transactions.valueGrainReceive"}
                 }

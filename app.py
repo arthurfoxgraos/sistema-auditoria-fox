@@ -212,7 +212,11 @@ def show_cargas_page():
             'driver_name': 'Caminhoneiro',
             'grain_name': 'Grão',
             'contract_type': 'Tipo Contrato',
-            'amount': 'Sacas'
+            'amount': 'Sacas',
+            'freight_value_per_bag': 'Frete/Sc',
+            'total_freight_value': 'Valor Total Frete',
+            'revenue_value': 'Valor Receita',
+            'cost_value': 'Valor Custo'
         }
         
         # Verificar quais colunas existem e adicionar
@@ -243,9 +247,32 @@ def show_cargas_page():
                     df_display['Data de Carregamento'], errors='coerce'
                 ).dt.strftime('%d/%m/%Y')
             
-            # Formatar sacas se existir
-            if 'Sacas' in df_display.columns:
-                df_display['Sacas'] = df_display['Sacas'].fillna(0).round(0).astype(int)
+            # Formatar valores monetários
+            if 'freight_value_per_bag' in df_display.columns:
+                df_display['freight_value_per_bag'] = df_display['freight_value_per_bag'].apply(
+                    lambda x: f"R$ {x:.2f}" if pd.notnull(x) and x != 0 else "R$ 0,00"
+                )
+            
+            if 'total_freight_value' in df_display.columns:
+                df_display['total_freight_value'] = df_display['total_freight_value'].apply(
+                    lambda x: f"R$ {x:.2f}" if pd.notnull(x) and x != 0 else "R$ 0,00"
+                )
+            
+            if 'revenue_value' in df_display.columns:
+                df_display['revenue_value'] = df_display['revenue_value'].apply(
+                    lambda x: f"R$ {x:.2f}" if pd.notnull(x) and x != 0 else "R$ 0,00"
+                )
+            
+            if 'cost_value' in df_display.columns:
+                df_display['cost_value'] = df_display['cost_value'].apply(
+                    lambda x: f"R$ {x:.2f}" if pd.notnull(x) and x != 0 else "R$ 0,00"
+                )
+            
+            # Formatar sacas como número inteiro
+            if 'amount' in df_display.columns:
+                df_display['amount'] = df_display['amount'].apply(
+                    lambda x: f"{int(x)}" if pd.notnull(x) and x != 0 else "0"
+                )
             
             st.dataframe(
                 df_display,
