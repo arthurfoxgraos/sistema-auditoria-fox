@@ -1,0 +1,88 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: fox-auditoria-sync
+  namespace: fox-auditoria
+  labels:
+    app: fox-auditoria
+    component: sync-job
+spec:
+  # Executar a cada 5 minutos
+  schedule: "*/5 * * * *"
+  
+  # Configurações do CronJob
+  concurrencyPolicy: Forbid  # Não permitir execuções simultâneas
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 300  # 5 minutos para iniciar
+  
+  jobTemplate:
+    spec:
+      # Configurações do Job
+      backoffLimit: 2  # Máximo 2 tentativas
+      activeDeadlineSeconds: 240  # Timeout de 4 minutos
+      
+      template:
+        metadata:
+          labels:
+            app: fox-auditoria
+            component: sync-job
+        spec:
+          restartPolicy: Never
+          
+          containers:
+          - name: fox-auditoria-sync
+            image: structor01/fox-auditoria:latest
+            imagePullPolicy: Always
+            
+            # Comando para executar sincronização
+            command: ["/bin/bash"]
+            args:
+              - -c
+              - |
+                echo "🚀 Iniciando sincronização FOX Auditoria..."
+                echo "⏰ $(date): Job iniciado"
+                
+                # Instalar dependências se necessário
+                pip install --quiet pymongo pandas plotly streamlit
+                
+                # Executar script de sincronização
+                python3 /app/scripts/sync_job.py
+                
+                echo "✅ $(date): Job concluído"
+            
+            # Variáveis de ambiente
+            env:
+            - name: MONGODB_URI
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-secret
+                  key: mongodb-uri
+            - name: PYTHONPATH
+              value: "/app"
+            - name: STREAMLIT_SERVER_HEADLESS
+              value: "true"
+            
+            # Recursos
+            resources:
+              requests:
+                memory: "256Mi"
+                cpu: "100m"
+              limits:
+                memory: "512Mi"
+                cpu: "500m"
+            
+            # Health checks não são necessários para jobs
+            
+          # Configurações do Pod
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            fsGroup: 1000
+          
+          # Tolerâncias para execução em qualquer node
+          tolerations:
+          - key: "node-role.kubernetes.io/master"
+            operator: "Exists"
+            effect: "NoSchedule"
+
