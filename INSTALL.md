@@ -7,16 +7,9 @@
 pip install -r requirements.txt
 ```
 
-### 2. Para funcionalidade PostgreSQL (se houver erro):
+### 2. Para funcionalidade PostgreSQL:
 ```bash
-# Opção 1: Versão específica
-pip install psycopg2-binary==2.9.9
-
-# Opção 2: Versão mais recente
-pip install psycopg2-binary
-
-# Opção 3: Se ainda houver erro, force a instalação binária
-pip install --only-binary=psycopg2-binary psycopg2-binary
+pip install pg8000
 ```
 
 ### 3. Executar localmente:
@@ -26,7 +19,7 @@ streamlit run app.py
 
 ## 🐘 PostgreSQL
 
-O sistema agora suporta PostgreSQL como fonte de dados para cargas:
+O sistema agora suporta PostgreSQL como fonte de dados para cargas usando **pg8000** (biblioteca pura Python):
 
 - **Host:** 24.199.75.66
 - **Porta:** 5432
@@ -46,25 +39,16 @@ Para deploy no Kubernetes, todas as dependências estão incluídas no container
 
 ## ⚠️ Troubleshooting
 
-### Erro: "No module named 'psycopg2'"
+### Erro: "No module named 'pg8000'"
 ```bash
-pip install psycopg2-binary
+pip install pg8000
 ```
 
-### Erro: "pg_config executable not found"
-Este erro acontece quando o pip tenta compilar psycopg2 do código fonte:
-
-```bash
-# Solução 1: Forçar instalação binária
-pip install --only-binary=psycopg2-binary psycopg2-binary
-
-# Solução 2: Usar versão específica
-pip install psycopg2-binary==2.9.9
-
-# Solução 3: Atualizar pip e tentar novamente
-pip install --upgrade pip
-pip install psycopg2-binary
-```
+### Vantagens do pg8000 sobre psycopg2:
+- ✅ **Puro Python:** Não requer compilação
+- ✅ **Sem dependências:** Não precisa de pg_config ou headers PostgreSQL
+- ✅ **Fácil instalação:** Funciona em qualquer ambiente Python
+- ✅ **Compatível:** API similar ao psycopg2
 
 ### Erro de conexão PostgreSQL
 - Verificar credenciais

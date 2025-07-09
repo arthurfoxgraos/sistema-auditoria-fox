@@ -1,12 +1,13 @@
 """
 Serviço PostgreSQL para Sistema de Auditoria FOX
+Usando pg8000 - biblioteca PostgreSQL pura em Python
 """
 try:
-    import psycopg2
-    PSYCOPG2_AVAILABLE = True
+    import pg8000
+    PG8000_AVAILABLE = True
 except ImportError:
-    PSYCOPG2_AVAILABLE = False
-    psycopg2 = None
+    PG8000_AVAILABLE = False
+    pg8000 = None
 
 import pandas as pd
 from datetime import datetime
@@ -15,18 +16,18 @@ import streamlit as st
 class PostgreSQLService:
     def __init__(self):
         self.connection = None
-        if PSYCOPG2_AVAILABLE:
+        if PG8000_AVAILABLE:
             self.connect()
         else:
-            st.error("❌ psycopg2 não instalado. Execute: pip install psycopg2-binary")
+            st.error("❌ pg8000 não instalado. Execute: pip install pg8000")
     
     def connect(self):
-        """Conecta ao PostgreSQL"""
-        if not PSYCOPG2_AVAILABLE:
+        """Conecta ao PostgreSQL usando pg8000"""
+        if not PG8000_AVAILABLE:
             return False
             
         try:
-            self.connection = psycopg2.connect(
+            self.connection = pg8000.connect(
                 host="24.199.75.66",
                 port=5432,
                 user="myuser",
@@ -40,7 +41,7 @@ class PostgreSQLService:
     
     def create_tables(self):
         """Cria tabelas necessárias no PostgreSQL"""
-        if not PSYCOPG2_AVAILABLE or not self.connection:
+        if not PG8000_AVAILABLE or not self.connection:
             return False
             
         try:
@@ -78,7 +79,7 @@ class PostgreSQLService:
     
     def get_cargas_data(self):
         """Busca dados de cargas do PostgreSQL"""
-        if not PSYCOPG2_AVAILABLE or not self.connection:
+        if not PG8000_AVAILABLE or not self.connection:
             return pd.DataFrame()
             
         try:
@@ -104,7 +105,17 @@ class PostgreSQLService:
                 LIMIT 1000
             """
             
-            df = pd.read_sql_query(query, self.connection)
+            # pg8000 requer uma abordagem diferente para pandas
+            cursor = self.connection.cursor()
+            cursor.execute(query)
+            
+            # Buscar dados e colunas
+            rows = cursor.fetchall()
+            columns = [desc[0] for desc in cursor.description]
+            cursor.close()
+            
+            # Criar DataFrame
+            df = pd.DataFrame(rows, columns=columns)
             
             if not df.empty:
                 # Processar dados
@@ -125,7 +136,7 @@ class PostgreSQLService:
     
     def sync_from_mongodb(self, mongodb_data):
         """Sincroniza dados do MongoDB para PostgreSQL"""
-        if not PSYCOPG2_AVAILABLE or not self.connection:
+        if not PG8000_AVAILABLE or not self.connection:
             return 0
             
         try:
@@ -136,26 +147,13 @@ class PostgreSQLService:
             
             # Inserir dados do MongoDB
             for _, row in mongodb_data.iterrows():
+                # pg8000 usa %s para placeholders
                 cursor.execute("""
                     INSERT INTO cargas (
                         ticket_id, amount, loading_date, status, paid,
                         buyer_name, seller_name, grain_name, contract_type,
                         receita, custo, frete, lucro_bruto
                     ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (ticket_id) DO UPDATE SET
-                        amount = EXCLUDED.amount,
-                        loading_date = EXCLUDED.loading_date,
-                        status = EXCLUDED.status,
-                        paid = EXCLUDED.paid,
-                        buyer_name = EXCLUDED.buyer_name,
-                        seller_name = EXCLUDED.seller_name,
-                        grain_name = EXCLUDED.grain_name,
-                        contract_type = EXCLUDED.contract_type,
-                        receita = EXCLUDED.receita,
-                        custo = EXCLUDED.custo,
-                        frete = EXCLUDED.frete,
-                        lucro_bruto = EXCLUDED.lucro_bruto,
-                        synced_at = CURRENT_TIMESTAMP
                 """, (
                     str(row.get('_id', '')),
                     float(row.get('amount', 0)),
@@ -183,7 +181,7 @@ class PostgreSQLService:
     
     def get_sync_stats(self):
         """Retorna estatísticas de sincronização"""
-        if not PSYCOPG2_AVAILABLE or not self.connection:
+        if not PG8000_AVAILABLE or not self.connection:
             return {'total_cargas': 0, 'last_sync': None}
             
         try:
