@@ -126,9 +126,9 @@ class SyncService:
     def sync_data(self):
         """Executa sincronização completa"""
         try:
-            # Criar tabelas se não existirem
-            if not self.postgres_service.create_tables():
-                return False, "Erro ao criar tabelas PostgreSQL"
+            # Verificar se PostgreSQL está disponível
+            if not self.postgres_service or not self.postgres_service.connection:
+                return False, "PostgreSQL não está disponível"
             
             # Buscar dados do MongoDB
             st.info("🔄 Buscando dados do MongoDB...")
