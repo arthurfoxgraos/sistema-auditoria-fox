@@ -87,7 +87,7 @@ def show_cargas_page():
     
     # Filtros
     st.subheader("🔍 Filtros")
-    col1, col2, col3, col4, col5 = st.columns(5)
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
     
     with col1:
         if 'status' in df_tickets.columns:
@@ -97,6 +97,15 @@ def show_cargas_page():
             status_filter = "Todos"
     
     with col2:
+        # Filtro por conformidade de provisioning
+        conformity_options = ["Todos", "✅ Conforme", "❌ Não Conforme"]
+        conformity_filter = st.selectbox(
+            "Conformidade:",
+            options=conformity_options,
+            key="conformity_filter"
+        )
+    
+    with col3:
         # Filtro por status de pagamento
         payment_options = ["Todos", "✅ Pago", "⏰ Não Pago"]
         payment_filter = st.selectbox(
@@ -105,7 +114,7 @@ def show_cargas_page():
             key="payment_filter"
         )
     
-    with col3:
+    with col4:
         # Filtro por intervalo de datas
         if 'loadingDate' in df_tickets.columns:
             df_tickets['loadingDate'] = pd.to_datetime(df_tickets['loadingDate'], errors='coerce')
@@ -122,7 +131,7 @@ def show_cargas_page():
         else:
             date_range = None
     
-    with col4:
+    with col5:
         # Filtro por tipo de contrato
         contract_types = ["Todos"]
         if 'contract_type' in df_tickets.columns:
@@ -135,7 +144,7 @@ def show_cargas_page():
             key="contract_filter"
         )
     
-    with col5:
+    with col6:
         # Filtro por comprador
         buyer_options = ["Todos"]
         if 'buyer_name' in df_tickets.columns:
@@ -154,6 +163,13 @@ def show_cargas_page():
     # Filtro por status
     if status_filter != "Todos" and 'status' in df_filtered.columns:
         df_filtered = df_filtered[df_filtered['status'] == status_filter]
+    
+    # Filtro por conformidade de provisioning
+    if conformity_filter != "Todos" and 'provisioning_status' in df_filtered.columns:
+        if conformity_filter == "✅ Conforme":
+            df_filtered = df_filtered[df_filtered['provisioning_status'] == "✅ Conforme"]
+        elif conformity_filter == "❌ Não Conforme":
+            df_filtered = df_filtered[df_filtered['provisioning_status'] == "❌ Não Conforme"]
     
     # Filtro por status de pagamento
     if payment_filter != "Todos" and 'paid_status' in df_filtered.columns:
@@ -228,6 +244,7 @@ def show_cargas_page():
         # Selecionar colunas específicas solicitadas
         display_columns = []
         column_mapping = {
+            'provisioning_status': 'Conformidade',
             'paid_status': 'Pago',
             'ticket': 'Nro Ticket',
             'loadingDate': 'Data de Carregamento', 

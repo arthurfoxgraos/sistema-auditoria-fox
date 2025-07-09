@@ -131,6 +131,15 @@ class DatabaseService:
                     "is_freight_contract": {"$arrayElemAt": ["$origin_order_info.isFreight", 0]},
                     # Extrair amount do array transactions
                     "amount": {"$sum": "$transactions.amount"},
+                    # Status de provisioning das transactions
+                    "provisioning_status": {
+                        "$cond": {
+                            "if": {"$eq": [{"$arrayElemAt": ["$transactions.provisioning", 0]}, True]},
+                            "then": "✅ Conforme",
+                            "else": "❌ Não Conforme"
+                        }
+                    },
+                    "is_provisioning_compliant": {"$arrayElemAt": ["$transactions.provisioning", 0]},
                     # Valores de frete
                     "freight_value_per_bag": "$freightValue",
                     "total_freight_value": {
