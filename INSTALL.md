@@ -7,9 +7,16 @@
 pip install -r requirements.txt
 ```
 
-### 2. Para funcionalidade PostgreSQL:
+### 2. Para funcionalidade PostgreSQL (se houver erro):
 ```bash
+# Opção 1: Versão específica
+pip install psycopg2-binary==2.9.9
+
+# Opção 2: Versão mais recente
 pip install psycopg2-binary
+
+# Opção 3: Se ainda houver erro, force a instalação binária
+pip install --only-binary=psycopg2-binary psycopg2-binary
 ```
 
 ### 3. Executar localmente:
@@ -44,6 +51,21 @@ Para deploy no Kubernetes, todas as dependências estão incluídas no container
 pip install psycopg2-binary
 ```
 
+### Erro: "pg_config executable not found"
+Este erro acontece quando o pip tenta compilar psycopg2 do código fonte:
+
+```bash
+# Solução 1: Forçar instalação binária
+pip install --only-binary=psycopg2-binary psycopg2-binary
+
+# Solução 2: Usar versão específica
+pip install psycopg2-binary==2.9.9
+
+# Solução 3: Atualizar pip e tentar novamente
+pip install --upgrade pip
+pip install psycopg2-binary
+```
+
 ### Erro de conexão PostgreSQL
 - Verificar credenciais
 - Verificar conectividade de rede
@@ -52,4 +74,9 @@ pip install psycopg2-binary
 ### MongoDB não conecta
 - Verificar variável MONGODB_URI
 - Verificar conectividade com DigitalOcean
+
+### Sistema funciona sem PostgreSQL
+O sistema foi projetado para funcionar graciosamente:
+- **Com PostgreSQL:** Funcionalidade completa de sincronização
+- **Sem PostgreSQL:** Usa apenas MongoDB (funcionalidade padrão)
 

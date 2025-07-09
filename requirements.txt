@@ -5,3 +5,6 @@ pymongo==4.10.1
 psycopg2-binary==2.9.9
 python-dotenv==1.0.1
 
+# Alternativa para psycopg2 se houver problemas:
+# psycopg2-binary>=2.9.0,<3.0.0
+
