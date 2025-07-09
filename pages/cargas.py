@@ -1,231 +1,53 @@
 """
 Página de Cargas - Sistema de Auditoria FOX
-Agora usando PostgreSQL como fonte principal
 """
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from datetime import datetime, timedelta
-from src.postgres_service import PostgreSQLService
-from src.sync_service import SyncService
+import datetime
+from config.database import get_database_connection
+from src.database_service import DatabaseService
 
 @st.cache_data(ttl=60)
 def load_cargas_data():
-    """Carrega dados de cargas do PostgreSQL"""
+    """Carrega dados de cargas do MongoDB"""
     try:
-        postgres_service = PostgreSQLService()
-        df = postgres_service.get_cargas_data()
-        postgres_service.close()
-        return df
+        db_config = get_database_connection()
+        if not db_config:
+            return None, None
+        
+        collections = db_config.get_collections()
+        db_service = DatabaseService(collections)
+        
+        # Buscar tickets com lookup de users
+        tickets = db_service.get_tickets_with_users(limit=1000)
+        
+        # Buscar transações
+        transactions = db_service.get_ticket_transactions(limit=1000)
+        
+        db_config.close_connection()
+        return tickets, transactions
+    
     except Exception as e:
         st.error(f"❌ Erro ao carregar cargas: {e}")
-        return pd.DataFrame()
-
-def show_sync_panel():
-    """Mostra painel de sincronização"""
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("🔄 Sincronização")
-    
-    # Inicializar serviço de sync
-    sync_service = SyncService()
-    
-    # Status da sincronização
-    status = sync_service.get_sync_status()
-    
-    st.sidebar.metric("📊 MongoDB", f"{status['mongodb_count']:,} cargas")
-    st.sidebar.metric("🐘 PostgreSQL", f"{status['postgres_count']:,} cargas")
-    
-    if status['last_sync']:
-        last_sync_str = status['last_sync'].strftime('%d/%m/%Y %H:%M')
-        st.sidebar.info(f"🕒 Última sync: {last_sync_str}")
-    else:
-        st.sidebar.warning("⚠️ Nunca sincronizado")
-    
-    # Botão de sincronização
-    if status['sync_needed']:
-        st.sidebar.warning("🔄 Sincronização necessária")
-    else:
-        st.sidebar.success("✅ Dados sincronizados")
-    
-    if st.sidebar.button("🔄 Sincronizar Agora", type="primary"):
-        with st.spinner("🔄 Sincronizando dados..."):
-            success, message = sync_service.sync_data()
-            
-            if success:
-                st.sidebar.success(message)
-                st.cache_data.clear()  # Limpar cache para recarregar dados
-                st.rerun()
-            else:
-                st.sidebar.error(message)
-    
-    sync_service.close_connections()
+        return None, None
 
 def show_cargas_page():
     """Mostra página de cargas"""
     st.header("🚚 Gestão de Cargas")
-    st.caption("📊 Dados carregados do PostgreSQL")
     
-    # Painel de sincronização na sidebar
-    show_sync_panel()
+    # Carregar dados
+    tickets_data, transactions_data = load_cargas_data()
     
-    # Carregar dados do PostgreSQL
-    with st.spinner("🔄 Carregando dados do PostgreSQL..."):
-        df = load_cargas_data()
-    
-    if df.empty:
-        st.warning("⚠️ Nenhuma carga encontrada no PostgreSQL")
-        st.info("💡 Use o botão 'Sincronizar Agora' na barra lateral para importar dados do MongoDB")
+    if tickets_data is None:
+        st.error("❌ Não foi possível carregar os dados de cargas.")
         return
     
-    # Métricas
-    col1, col2, col3, col4 = st.columns(4)
+    # Converter para DataFrame
+    df_tickets = pd.DataFrame(tickets_data)
     
-    with col1:
-        total_cargas = len(df)
-        finalizadas = len(df[df['status'].isin(['Finalizado', 'Concluído'])])
-        st.metric("📊 Total de Cargas", f"{total_cargas:,}", f"↗ {finalizadas} finalizadas")
-    
-    with col2:
-        total_quantidade = df['quantidade'].sum()
-        st.metric("📦 Quantidade Total", f"{total_quantidade:,.0f} sacas")
-    
-    with col3:
-        valor_total_frete = df['frete'].sum()
-        st.metric("💰 Valor Total Frete", f"R$ {valor_total_frete:,.2f}")
-    
-    with col4:
-        cargas_por_quantidade = total_cargas / total_quantidade if total_quantidade > 0 else 0
-        percentual_finalizadas = (finalizadas / total_cargas * 100) if total_cargas > 0 else 0
-        st.metric("📈 Cargas/Quantidade", f"{cargas_por_quantidade:.0f}", f"↗ {percentual_finalizadas:.1f}%")
-    
-    # Filtros
-    st.subheader("🔍 Filtros")
-    col1, col2, col3, col4, col5 = st.columns(5)
-    
-    with col1:
-        status_unicos = ['Todos'] + sorted(df['status'].unique().tolist())
-        filtro_status = st.selectbox("Status", status_unicos)
-    
-    with col2:
-        pagamento_opcoes = ['Todos', '✅ Pago', '⏰ Não Pago']
-        filtro_pagamento = st.selectbox("Status Pagamento", pagamento_opcoes)
-    
-    with col3:
-        data_min = datetime.now() - timedelta(days=30)
-        data_max = datetime.now()
-        filtro_data = st.date_input(
-            "Intervalo de datas",
-            value=(data_min.date(), data_max.date()),
-            format="DD/MM/YYYY"
-        )
-    
-    with col4:
-        tipos_contrato = ['Todos'] + sorted(df['tipo_contrato'].unique().tolist())
-        filtro_tipo = st.selectbox("Tipo de Contrato", tipos_contrato)
-    
-    with col5:
-        compradores_unicos = ['Todos'] + sorted(df['comprador'].unique().tolist())
-        filtro_comprador = st.selectbox("Comprador", compradores_unicos)
-    
-    # Aplicar filtros
-    df_filtrado = df.copy()
-    
-    if filtro_status != 'Todos':
-        df_filtrado = df_filtrado[df_filtrado['status'] == filtro_status]
-    
-    if filtro_pagamento == '✅ Pago':
-        df_filtrado = df_filtrado[df_filtrado['paid_status'] == '✅']
-    elif filtro_pagamento == '⏰ Não Pago':
-        df_filtrado = df_filtrado[df_filtrado['paid_status'] == '⏰']
-    
-    if filtro_tipo != 'Todos':
-        df_filtrado = df_filtrado[df_filtrado['tipo_contrato'] == filtro_tipo]
-    
-    if filtro_comprador != 'Todos':
-        df_filtrado = df_filtrado[df_filtrado['comprador'] == filtro_comprador]
-    
-    # Totalizadores dos resultados filtrados
-    st.subheader(f"📊 Resultados: {len(df_filtrado)} cargas (PostgreSQL)")
-    
-    col1, col2, col3, col4, col5 = st.columns(5)
-    
-    with col1:
-        receita_total = df_filtrado['receita'].sum()
-        st.metric("💰 Receita Total", f"R$ {receita_total:,.2f}")
-    
-    with col2:
-        custo_total = df_filtrado['custo'].sum()
-        st.metric("💸 Custo Total", f"R$ {custo_total:,.2f}")
-    
-    with col3:
-        frete_total = df_filtrado['frete'].sum()
-        st.metric("🚛 Frete Total", f"R$ {frete_total:,.2f}")
-    
-    with col4:
-        lucro_bruto_total = df_filtrado['lucro_bruto'].sum()
-        margem = (lucro_bruto_total / receita_total * 100) if receita_total > 0 else 0
-        st.metric("📈 Lucro Bruto Total", f"R$ {lucro_bruto_total:,.2f}", f"↗ {margem:.2f}%")
-    
-    with col5:
-        total_sacas = df_filtrado['quantidade'].sum()
-        st.metric("📦 Total Sacas", f"{total_sacas:,.0f}")
-    
-    # Tabela
-    st.subheader("📋 Tabela de Cargas")
-    
-    # Formatação da tabela
-    df_display = df_filtrado.copy()
-    df_display['quantidade'] = df_display['quantidade'].apply(lambda x: f"{x:,.0f}")
-    df_display['receita'] = df_display['receita'].apply(lambda x: f"R$ {x:,.2f}")
-    df_display['custo'] = df_display['custo'].apply(lambda x: f"R$ {x:,.2f}")
-    df_display['frete'] = df_display['frete'].apply(lambda x: f"R$ {x:,.2f}")
-    df_display['lucro_bruto'] = df_display['lucro_bruto'].apply(lambda x: f"R$ {x:,.2f}")
-    
-    # Selecionar e renomear colunas
-    colunas_exibir = [
-        'paid_status', 'ticket_id', 'data_carregamento', 'comprador', 'vendedor', 
-        'caminhoneiro', 'grao', 'tipo_contrato', 'status', 'quantidade', 
-        'receita', 'custo', 'frete', 'lucro_bruto'
-    ]
-    
-    df_display = df_display[colunas_exibir].rename(columns={
-        'paid_status': 'Pago',
-        'ticket_id': 'Nro Ticket',
-        'data_carregamento': 'Data de Carregamento',
-        'comprador': 'Comprador',
-        'vendedor': 'Vendedor',
-        'caminhoneiro': 'Caminhoneiro',
-        'grao': 'Grão',
-        'tipo_contrato': 'Tipo Contrato',
-        'status': 'Status',
-        'quantidade': 'Sacas',
-        'receita': 'Receita',
-        'custo': 'Custo',
-        'frete': 'Frete',
-        'lucro_bruto': 'Lucro Bruto'
-    })
-    
-    st.dataframe(df_display, use_container_width=True, height=600)
-    
-    # Gráficos
-    if not df_filtrado.empty:
-        st.subheader("📊 Análises")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Gráfico por status
-            df_status = df_filtrado.groupby('status').size().reset_index(name='count')
-            fig = px.bar(df_status, x='status', y='count', 
-                        title="📊 Distribuição por Status")
-            st.plotly_chart(fig, use_container_width=True)
-        
-        with col2:
-            # Gráfico por pagamento
-            df_pagamento = df_filtrado.groupby('paid_status').size().reset_index(name='count')
-            fig = px.pie(df_pagamento, values='count', names='paid_status', 
-                        title="💰 Status de Pagamento")
-            st.plotly_chart(fig, use_container_width=True)
+    if df_tickets.empty:
+        st.warning("Nenhuma carga encontrada.")
         return
     
     # Métricas principais
