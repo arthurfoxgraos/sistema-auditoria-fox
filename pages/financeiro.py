@@ -15,13 +15,27 @@ def load_finances_data():
     try:
         db_config = get_database_connection()
         if not db_config:
+            st.error("Não foi possível conectar ao banco de dados")
             return None
         
         collections = db_config.get_collections()
+        if not collections:
+            st.error("Não foi possível obter as coleções do banco")
+            return None
+            
         db_service = DatabaseService(collections)
-        return db_service.get_finances_with_lookups()
+        data = db_service.get_finances_with_lookups()
+        
+        if data:
+            # Converter lista de dicionários para DataFrame
+            df = pd.DataFrame(data)
+            return df
+        else:
+            return pd.DataFrame()  # DataFrame vazio se não há dados
+            
     except Exception as e:
         st.error(f"Erro ao carregar dados financeiros: {e}")
+        print(f"Erro detalhado: {e}")
         return None
 
 def show_financeiro_page():
