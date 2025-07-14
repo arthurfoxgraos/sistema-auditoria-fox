@@ -14,7 +14,7 @@ def load_finances_data():
             collections = db_config.get_collections()
             db_service = DatabaseService(collections)
 
-            # Buscar todos os dados do ano em exercício, sem limite
+            # Buscar dados sem limite, filtrando apenas isIgnored
             finances = db_service.get_finances_with_lookups()
 
             if finances:

@@ -331,16 +331,23 @@ class DatabaseService:
             return []
 
 
-    def get_finances_with_lookups(self, limit: int = None) -> List[Dict]:
+    def get_finances_with_lookups(self, year_filter=None, limit: int = None) -> List[Dict]:
         """Busca dados financeiros com lookup de categories e users"""
         if self.finances is None:
             print("Coleção finances não disponível")
             return []
         
-        # Ano em exercício (ano atual)
-        current_year = datetime.now().year
-        start_of_year = datetime(current_year, 1, 1)
-        end_of_year = datetime(current_year, 12, 31, 23, 59, 59)
+        # Definir filtro de data baseado no ano
+        if year_filter and year_filter != "Todos":
+            # Filtrar pelo ano específico
+            filter_year = int(year_filter)
+            start_of_year = datetime(filter_year, 1, 1)
+            end_of_year = datetime(filter_year, 12, 31, 23, 59, 59)
+        else:
+            # Filtrar pelo ano em exercício (ano atual)
+            current_year = datetime.now().year
+            start_of_year = datetime(current_year, 1, 1)
+            end_of_year = datetime(current_year, 12, 31, 23, 59, 59)
             
         pipeline = [
             # Filtro por ano em exercício e isIgnored

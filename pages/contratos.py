@@ -50,7 +50,12 @@ def load_contratos_data():
                     {"$arrayElemAt": ["$destOrderList", -1]},
                     {"$arrayElemAt": ["$origOrderList", -1]}
                 ]},
-                "pis_status": {"$cond": {"if": {"$eq": ["$hasPIS", True]}, "then": "✅ Com PIS", "else": "❌ Sem PIS"}}
+                "pis_status": {"$cond": {"if": {"$eq": ["$hasPIS", True]}, "then": "✅ Com PIS", "else": "❌ Sem PIS"}},
+                "pis_cofins_value": {"$cond": {
+                    "if": {"$eq": ["$hasPIS", True]}, 
+                    "then": {"$multiply": [{"$multiply": ["$amount", "$bagPrice"]}, 0.0925]}, 
+                    "else": 0
+                }}
             }},
             {"$match": {"$expr": {"$ne": ["$isCanceled", True]}}},
             {"$sort": {"createdAt": -1}},
@@ -87,7 +92,12 @@ def show_contratos_page():
     c1, c2, c3, c4, c5 = st.columns(5)
     with c1: grain_opt = st.selectbox("Grão", ["Todos"] + grains)
     with c2: type_opt = st.selectbox("Tipo de contrato", ["Todos"] + types)
-    with c3: dir_opt = st.selectbox("Fluxo", ["Todos"] + directions)
+    with c3: 
+        # Definir valor padrão como Originação se existir, senão o primeiro da lista
+        default_direction = "Originação" if "Originação" in directions else (directions[0] if directions else "Todos")
+        direction_options = ["Todos"] + directions
+        default_index = direction_options.index(default_direction) if default_direction in direction_options else 0
+        dir_opt = st.selectbox("Fluxo", direction_options, index=default_index)
     with c4: pis_opt = st.selectbox("PIS", ["Todos"] + pis_options)
     with c5: cli_search = st.text_input("Pesquisar cliente")
     c6, c7 = st.columns(2)
@@ -118,7 +128,7 @@ def show_contratos_page():
     df_f['total'] = df_f['amount'] * df_f['bagPrice']
     
     # Cards de métricas
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
         st.metric("Total de Sacas", f"{int(df_f['amount'].sum()):,}".replace(',', '.'))
@@ -135,6 +145,11 @@ def show_contratos_page():
         # Volume médio por cliente
         avg_volume_per_client = df_f['amount'].sum() / unique_clients if unique_clients > 0 else 0
         st.metric("Volume Médio/Cliente", f"{int(avg_volume_per_client):,}".replace(',', '.'))
+    
+    with col5:
+        # Total PIS/COFINS
+        total_pis_cofins = df_f['pis_cofins_value'].sum()
+        st.metric("Total PIS/COFINS", f"R$ {total_pis_cofins:,.2f}".replace(',', 'X').replace('.', ',').replace('X','.'))
     
     # Análise de volumes por cliente
     st.subheader("📊 Volumes Comercializados por Cliente")
