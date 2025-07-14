@@ -30,6 +30,23 @@ st.set_page_config(
 # CSS customizado
 st.markdown("""
 <style>
+    /* Margem full - usar toda largura da tela */
+    .main .block-container {
+        max-width: 100%;
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+    
+    /* Remover padding extra */
+    .stApp > header {
+        background-color: transparent;
+    }
+    
+    /* Maximizar largura dos dataframes */
+    .stDataFrame {
+        width: 100%;
+    }
+    
     .main-header {
         font-size: 2.5rem;
         font-weight: bold;
