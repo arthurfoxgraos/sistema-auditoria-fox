@@ -87,7 +87,7 @@ def show_cargas_page():
     
     # Filtros
     st.subheader("🔍 Filtros")
-    col1, col2, col3, col4, col5, col6 = st.columns(6)
+    col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
     
     with col1:
         if 'status' in df_tickets.columns:
@@ -115,6 +115,19 @@ def show_cargas_page():
         )
     
     with col4:
+        # Filtro por grão
+        grain_options = ["Todos"]
+        if 'grain_name' in df_tickets.columns:
+            unique_grains = df_tickets['grain_name'].dropna().unique()
+            grain_options.extend(sorted(unique_grains))
+        
+        grain_filter = st.selectbox(
+            "Grão:",
+            options=grain_options,
+            key="grain_filter"
+        )
+    
+    with col5:
         # Filtro por intervalo de datas
         if 'loadingDate' in df_tickets.columns:
             df_tickets['loadingDate'] = pd.to_datetime(df_tickets['loadingDate'], errors='coerce')
@@ -131,7 +144,7 @@ def show_cargas_page():
         else:
             date_range = None
     
-    with col5:
+    with col6:
         # Filtro por tipo de contrato
         contract_types = ["Todos"]
         if 'contract_type' in df_tickets.columns:
@@ -144,7 +157,7 @@ def show_cargas_page():
             key="contract_filter"
         )
     
-    with col6:
+    with col7:
         # Filtro por comprador
         buyer_options = ["Todos"]
         if 'buyer_name' in df_tickets.columns:
@@ -177,6 +190,10 @@ def show_cargas_page():
             df_filtered = df_filtered[df_filtered['paid_status'] == "✅"]
         elif payment_filter == "⏰ Não Pago":
             df_filtered = df_filtered[df_filtered['paid_status'] == "⏰"]
+    
+    # Filtro por grão
+    if grain_filter != "Todos" and 'grain_name' in df_filtered.columns:
+        df_filtered = df_filtered[df_filtered['grain_name'] == grain_filter]
     
     # Filtro por intervalo de datas
     if date_range and len(date_range) == 2 and 'loadingDate' in df_filtered.columns:
