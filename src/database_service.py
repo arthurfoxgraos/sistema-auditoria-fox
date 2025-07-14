@@ -400,7 +400,7 @@ class DatabaseService:
             {
                 "$project": {
                     "_id": 1,
-                    "date": 1,
+                    "date": 1,  # Campo date original do documento
                     "value": 1,
                     "category_name": 1,
                     "category_item": 1,

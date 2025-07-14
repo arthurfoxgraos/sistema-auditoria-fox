@@ -91,17 +91,38 @@ def show_financeiro_page():
         date_column_found = False
         if 'date' in df_finances.columns:
             try:
-                # Tentar diferentes formatos de data
-                df_finances['date'] = pd.to_datetime(df_finances['date'], format='%Y%m%d%H%M%S', errors='coerce')
+                # Tratar formato específico YYYYMMDDHHMMSS[-3:BRT]
+                def parse_date_field(date_value):
+                    if pd.isna(date_value) or date_value is None:
+                        return None
+                    
+                    # Converter para string se necessário
+                    date_str = str(date_value)
+                    
+                    # Extrair apenas os 8 primeiros dígitos (YYYYMMDD)
+                    if len(date_str) >= 8:
+                        date_part = date_str[:8]
+                        try:
+                            # Converter YYYYMMDD para datetime
+                            return pd.to_datetime(date_part, format='%Y%m%d', errors='coerce')
+                        except:
+                            return None
+                    return None
+                
+                # Aplicar função de parsing
+                df_finances['date'] = df_finances['date'].apply(parse_date_field)
+                
+                # Verificar se conseguimos converter alguma data
                 if df_finances['date'].notna().any():
                     date_column_found = True
+                    st.success(f"✅ Campo 'date' processado com sucesso! {df_finances['date'].notna().sum()} datas válidas encontradas.")
                 else:
-                    # Tentar outros formatos
-                    df_finances['date'] = pd.to_datetime(df_finances['date'], errors='coerce')
-                    if df_finances['date'].notna().any():
-                        date_column_found = True
+                    st.warning("⚠️ Campo 'date' encontrado mas nenhuma data válida após conversão.")
+                    
             except Exception as e:
                 st.warning(f"Erro ao converter campo date: {e}")
+        else:
+            st.warning("Campo 'date' não encontrado nos dados.")
         
         # Filtro por ano
         st.subheader("🔍 Filtro")
