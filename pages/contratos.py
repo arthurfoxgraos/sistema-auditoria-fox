@@ -79,9 +79,13 @@ def show_contratos_page():
         st.warning("Nenhum contrato encontrado.")
         return
 
-    df['cliente'] = df.apply(lambda r: r['buyer_name'] if r['direction_type'] != 'Originação' else r['seller_name'], axis=1)
-    min_date, max_date = df['createdAt'].min().date(), df['createdAt'].max().date()
-    min_deliv, max_deliv = df['deliveryDate'].min().date(), df['deliveryDate'].max().date()
+    # Filtros de data baseados em createdAt
+    min_created_date = df['createdAt'].min().date() if not df['createdAt'].isna().all() else pd.Timestamp.now().date()
+    max_created_date = df['createdAt'].max().date() if not df['createdAt'].isna().all() else pd.Timestamp.now().date()
+    
+    # Filtros de entrega baseados em deliveryDate
+    min_deliv_date = df['deliveryDate'].min().date() if not df['deliveryDate'].isna().all() else pd.Timestamp.now().date()
+    max_deliv_date = df['deliveryDate'].max().date() if not df['deliveryDate'].isna().all() else pd.Timestamp.now().date()
 
     grains = sorted(df['grain_name'].dropna().unique())
     types = sorted(df['contract_type'].dropna().unique())
@@ -125,12 +129,14 @@ def show_contratos_page():
     with c6: month_opt = st.selectbox("Mês Entrega", month_options)
     with c7: cli_search = st.text_input("Pesquisar cliente")
     
+    df['cliente'] = df.apply(lambda r: r['buyer_name'] if r['direction_type'] != 'Originação' else r['seller_name'], axis=1)
+    
     c8, c9 = st.columns(2)
     with c8: status_opt = st.multiselect("Status", statuses, default=statuses)
-    with c9: date_range = st.date_input("Intervalo de criação", [min_date, max_date])
+    with c9: created_date_range = st.date_input("Intervalo de Criação (createdAt)", [min_created_date, max_created_date])
     
     c10, c11 = st.columns(2)
-    with c10: deliv_range = st.date_input("Intervalo Última Entrega", [min_deliv, max_deliv])
+    with c10: deliv_range = st.date_input("Intervalo Última Entrega", [min_deliv_date, max_deliv_date])
 
     df_f = df.copy()
     if grain_opt != "Todos": df_f = df_f[df_f['grain_name']==grain_opt]
@@ -150,10 +156,16 @@ def show_contratos_page():
             df_f = df_f[df_f['delivery_month'] == selected_month]
     if cli_search: df_f = df_f[df_f['cliente'].str.contains(cli_search, case=False, na=False)]
     if status_opt: df_f = df_f[df_f['status_display'].isin(status_opt)]
-    if isinstance(date_range, list):
-        s,e = date_range; df_f = df_f[(df_f['createdAt'].dt.date>=s)&(df_f['createdAt'].dt.date<=e)]
-    if isinstance(deliv_range, list):
-        ds,de = deliv_range; df_f = df_f[(df_f['deliveryDate'].dt.date>=ds)&(df_f['deliveryDate'].dt.date<=de)]
+    
+    # Filtro por data de criação (createdAt)
+    if isinstance(created_date_range, list) and len(created_date_range) == 2:
+        start_date, end_date = created_date_range
+        df_f = df_f[(df_f['createdAt'].dt.date >= start_date) & (df_f['createdAt'].dt.date <= end_date)]
+    
+    # Filtro por data de entrega
+    if isinstance(deliv_range, list) and len(deliv_range) == 2:
+        deliv_start, deliv_end = deliv_range
+        df_f = df_f[(df_f['deliveryDate'].dt.date >= deliv_start) & (df_f['deliveryDate'].dt.date <= deliv_end)]
 
     df_f['Entregue'] = df_f['amountOrderedSafe']
     df_f['% Entregue'] = (df_f['Entregue']/df_f['amount']*100).round(2).fillna(0)
