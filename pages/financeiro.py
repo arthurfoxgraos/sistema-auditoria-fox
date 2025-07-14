@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+from config.database import get_database_connection
 from src.database_service import DatabaseService
 
 def format_currency(value):
@@ -10,8 +11,18 @@ def format_currency(value):
 
 @st.cache_data(ttl=60)
 def load_finances_data():
-    db_service = DatabaseService()
-    return db_service.get_finances_with_lookups()
+    """Carrega dados financeiros do MongoDB"""
+    try:
+        db_config = get_database_connection()
+        if not db_config:
+            return None
+        
+        collections = db_config.get_collections()
+        db_service = DatabaseService(collections)
+        return db_service.get_finances_with_lookups()
+    except Exception as e:
+        st.error(f"Erro ao carregar dados financeiros: {e}")
+        return None
 
 def show_financeiro_page():
     st.title("💰 Financeiro")
