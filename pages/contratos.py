@@ -49,7 +49,8 @@ def load_contratos_data():
                     {"$eq": ["$direction_type", "Supply"]},
                     {"$arrayElemAt": ["$destOrderList", -1]},
                     {"$arrayElemAt": ["$origOrderList", -1]}
-                ]}
+                ]},
+                "pis_status": {"$cond": {"if": {"$eq": ["$hasPIS", True]}, "then": "✅ Com PIS", "else": "❌ Sem PIS"}}
             }},
             {"$match": {"$expr": {"$ne": ["$isCanceled", True]}}},
             {"$sort": {"createdAt": -1}},
@@ -81,22 +82,25 @@ def show_contratos_page():
     types = sorted(df['contract_type'].dropna().unique())
     directions = sorted(df['direction_type'].dropna().unique())
     statuses = sorted(df['status_display'].dropna().unique())
+    pis_options = sorted(df['pis_status'].dropna().unique()) if 'pis_status' in df.columns else []
 
-    c1, c2, c3, c4 = st.columns(4)
+    c1, c2, c3, c4, c5 = st.columns(5)
     with c1: grain_opt = st.selectbox("Grão", ["Todos"] + grains)
     with c2: type_opt = st.selectbox("Tipo de contrato", ["Todos"] + types)
     with c3: dir_opt = st.selectbox("Fluxo", ["Todos"] + directions)
-    with c4: cli_search = st.text_input("Pesquisar cliente")
-    c5, c6 = st.columns(2)
-    with c5: status_opt = st.multiselect("Status", statuses, default=statuses)
-    with c6: date_range = st.date_input("Intervalo de criação", [min_date, max_date])
-    c7, c8 = st.columns(2)
-    with c7: deliv_range = st.date_input("Intervalo Última Entrega", [min_deliv, max_deliv])
+    with c4: pis_opt = st.selectbox("PIS", ["Todos"] + pis_options)
+    with c5: cli_search = st.text_input("Pesquisar cliente")
+    c6, c7 = st.columns(2)
+    with c6: status_opt = st.multiselect("Status", statuses, default=statuses)
+    with c7: date_range = st.date_input("Intervalo de criação", [min_date, max_date])
+    c8, c9 = st.columns(2)
+    with c8: deliv_range = st.date_input("Intervalo Última Entrega", [min_deliv, max_deliv])
 
     df_f = df.copy()
     if grain_opt != "Todos": df_f = df_f[df_f['grain_name']==grain_opt]
     if type_opt != "Todos": df_f = df_f[df_f['contract_type']==type_opt]
     if dir_opt != "Todos": df_f = df_f[df_f['direction_type']==dir_opt]
+    if pis_opt != "Todos" and 'pis_status' in df_f.columns: df_f = df_f[df_f['pis_status']==pis_opt]
     if cli_search: df_f = df_f[df_f['cliente'].str.contains(cli_search, case=False, na=False)]
     if status_opt: df_f = df_f[df_f['status_display'].isin(status_opt)]
     if isinstance(date_range, list):
