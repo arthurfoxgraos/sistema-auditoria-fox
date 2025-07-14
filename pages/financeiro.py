@@ -127,43 +127,79 @@ def show_financeiro_page():
     st.subheader(f"📊 Resultados: {len(df_filtered)} registros financeiros")
 
     if not df_filtered.empty:
-        # Totalizador
+        # Totalizador geral
         total_valor = df_filtered['value'].sum()
         total_formatado = format_currency(total_valor)
         st.markdown(f"**🎯 Total Geral: {total_formatado}**")
-
-        # Preparar dados para exibição - apenas 4 colunas
-        display_columns = []
-        column_mapping = {
-            'date': 'Data',
-            'name': 'Usuário (Descrição)',
-            'value': 'Valor',
-            'category_item': 'Item'
-        }
-        for col, display_name in column_mapping.items():
-            if col in df_filtered.columns:
-                display_columns.append(col)
-
-        if display_columns:
-            df_display = df_filtered[display_columns].copy()
-            df_display.columns = [column_mapping.get(col, col) for col in display_columns]
-
-            # Formatar data
-            if 'Data' in df_display.columns:
-                df_display['Data'] = df_display['Data'].dt.strftime('%d/%m/%Y')
-
-            # Formatar valor monetário
-            if 'Valor' in df_display.columns:
-                df_display['Valor'] = df_display['Valor'].apply(lambda x: format_currency(x) if pd.notnull(x) else format_currency(0))
-
+        
+        st.divider()
+        
+        # Consolidado por item
+        st.subheader("📋 Consolidado por Item")
+        
+        if 'category_item' in df_filtered.columns:
+            # Agrupar por item e calcular totais
+            consolidado = df_filtered.groupby('category_item').agg({
+                'value': ['sum', 'count', 'mean']
+            }).round(2)
+            
+            # Achatar as colunas multi-nível
+            consolidado.columns = ['Total', 'Quantidade', 'Média']
+            consolidado = consolidado.sort_values('Total', ascending=False)
+            
+            # Calcular percentual
+            consolidado['Percentual'] = (consolidado['Total'] / total_valor * 100).round(1)
+            
+            # Formatar valores monetários
+            consolidado_display = consolidado.copy()
+            consolidado_display['Total'] = consolidado_display['Total'].apply(lambda x: format_currency(x))
+            consolidado_display['Média'] = consolidado_display['Média'].apply(lambda x: format_currency(x))
+            consolidado_display['Percentual'] = consolidado_display['Percentual'].apply(lambda x: f"{x}%")
+            
+            # Renomear índice
+            consolidado_display.index.name = 'Item'
+            
+            # Exibir tabela consolidada
             st.dataframe(
-                df_display,
+                consolidado_display,
                 use_container_width=True,
-                height=600
+                height=400
             )
+            
+            # Gráfico de pizza dos principais itens
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Top 10 itens
+                top_items = consolidado.head(10)
+                if len(top_items) > 0:
+                    import plotly.express as px
+                    fig = px.pie(
+                        values=top_items['Total'],
+                        names=top_items.index,
+                        title="Top 10 Itens - Distribuição de Valores"
+                    )
+                    fig.update_traces(textposition='inside', textinfo='percent+label')
+                    st.plotly_chart(fig, use_container_width=True)
+            
+            with col2:
+                # Gráfico de barras
+                if len(consolidado) > 0:
+                    import plotly.express as px
+                    top_items_bar = consolidado.head(10)
+                    fig_bar = px.bar(
+                        x=top_items_bar['Total'],
+                        y=top_items_bar.index,
+                        orientation='h',
+                        title="Top 10 Itens - Valores",
+                        labels={'x': 'Valor Total', 'y': 'Item'}
+                    )
+                    fig_bar.update_layout(yaxis={'categoryorder': 'total ascending'})
+                    st.plotly_chart(fig_bar, use_container_width=True)
+        
         else:
-            st.warning("Colunas solicitadas não encontradas nos dados.")
-            st.dataframe(df_filtered, use_container_width=True)
+            st.warning("Campo 'category_item' não encontrado nos dados para consolidação.")
+            
     else:
         st.info("Nenhum registro encontrado com os filtros aplicados.")
 
