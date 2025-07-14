@@ -50,41 +50,6 @@ def show_cargas_page():
         st.warning("Nenhuma carga encontrada.")
         return
     
-    # Métricas principais
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        total_cargas = len(df_tickets)
-        cargas_finalizadas = len(df_tickets[df_tickets.get('status', '') == 'Finalizado'])
-        st.metric(
-            label="🚚 Total de Cargas",
-            value=total_cargas,
-            delta=f"{cargas_finalizadas} finalizadas"
-        )
-    
-    with col2:
-        total_quantidade = df_tickets['amount'].sum() if 'amount' in df_tickets.columns else 0
-        st.metric(
-            label="📦 Quantidade Total",
-            value=f"{total_quantidade:,.0f} sacas"
-        )
-    
-    with col3:
-        total_frete = df_tickets['freightValue'].sum() if 'freightValue' in df_tickets.columns else 0
-        st.metric(
-            label="💰 Valor Total Frete",
-            value=f"R$ {total_frete:,.2f}"
-        )
-    
-    with col4:
-        cargas_com_quantidade = len(df_tickets[df_tickets['amount'].notna()]) if 'amount' in df_tickets.columns else 0
-        percentual = (cargas_com_quantidade / total_cargas * 100) if total_cargas > 0 else 0
-        st.metric(
-            label="📊 Cargas c/ Quantidade",
-            value=f"{cargas_com_quantidade}",
-            delta=f"{percentual:.1f}%"
-        )
-    
     # Filtros
     st.subheader("🔍 Filtros")
     col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
