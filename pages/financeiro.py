@@ -2,12 +2,48 @@ import streamlit as st
 import pandas as pd
 from config.database import get_database_connection
 from src.database_service import DatabaseService
+from bson import ObjectId
 
 def format_currency(value):
     """Formatar valor como moeda brasileira"""
     if pd.isna(value) or value == 0:
         return "R$ 0,00"
     return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+def clean_objectids(data):
+    """Converter ObjectIds para strings para evitar erro Arrow"""
+    if isinstance(data, list):
+        cleaned_data = []
+        for item in data:
+            if isinstance(item, dict):
+                cleaned_item = {}
+                for key, value in item.items():
+                    if isinstance(value, ObjectId):
+                        cleaned_item[key] = str(value)
+                    elif isinstance(value, list):
+                        cleaned_item[key] = clean_objectids(value)
+                    elif isinstance(value, dict):
+                        cleaned_item[key] = clean_objectids(value)
+                    else:
+                        cleaned_item[key] = value
+                cleaned_data.append(cleaned_item)
+            else:
+                cleaned_data.append(item)
+        return cleaned_data
+    elif isinstance(data, dict):
+        cleaned_dict = {}
+        for key, value in data.items():
+            if isinstance(value, ObjectId):
+                cleaned_dict[key] = str(value)
+            elif isinstance(value, list):
+                cleaned_dict[key] = clean_objectids(value)
+            elif isinstance(value, dict):
+                cleaned_dict[key] = clean_objectids(value)
+            else:
+                cleaned_dict[key] = value
+        return cleaned_dict
+    else:
+        return data
 
 @st.cache_data(ttl=60)
 def load_finances_data():
@@ -27,8 +63,11 @@ def load_finances_data():
         data = db_service.get_finances_with_lookups()
         
         if data:
+            # Limpar ObjectIds antes de converter para DataFrame
+            cleaned_data = clean_objectids(data)
+            
             # Converter lista de dicionários para DataFrame
-            df = pd.DataFrame(data)
+            df = pd.DataFrame(cleaned_data)
             return df
         else:
             return pd.DataFrame()  # DataFrame vazio se não há dados

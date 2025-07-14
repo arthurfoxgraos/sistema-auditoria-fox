@@ -396,6 +396,23 @@ class DatabaseService:
                     "value": "$value"
                 }
             },
+            # Projetar apenas os campos necessários (remover arrays com ObjectIds)
+            {
+                "$project": {
+                    "_id": 1,
+                    "date": 1,
+                    "value": 1,
+                    "category_name": 1,
+                    "category_item": 1,
+                    "category_type": 1,
+                    "category_dfc": 1,
+                    "user_name": 1,
+                    "userVinculated": 1,
+                    "category": 1,
+                    "description": 1,
+                    "isIgnored": 1
+                }
+            },
             {"$sort": {"date": -1}}
         ]
         
