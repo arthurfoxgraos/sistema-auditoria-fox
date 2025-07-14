@@ -136,63 +136,134 @@ def show_financeiro_page():
         if year_filter != "Todos" and date_column_found:
             df_filtered = df_filtered[df_filtered['date'].dt.year == int(year_filter)]
         
-        # Análise Mensal - ENTRADAS, SAÍDAS e SALDO DE CAIXA
-        st.subheader("📅 Detalhamento Mensal")
+        # Análise Mensal por Categoria
+        st.subheader("📅 Fluxo de Caixa Mensal por Categoria")
         
         if date_column_found and not df_filtered.empty:
             # Criar coluna de mês/ano
             df_filtered['month_year'] = df_filtered['date'].dt.to_period('M')
             
-            # Agrupar por mês e separar entradas/saídas
-            monthly_summary = df_filtered.groupby('month_year').agg({
-                'value': lambda x: [x[x > 0].sum(), x[x < 0].sum(), x.sum()]
-            }).reset_index()
+            # Definir categorias baseadas no valor e categoria
+            def categorize_financial_flow(row):
+                category_name = str(row.get('category_name', '')).upper()
+                item = str(row.get('category_item', '')).lower()
+                value = row.get('value', 0)
+                
+                # Separar por Entradas (valores positivos) e Saídas (valores negativos)
+                if value > 0:
+                    # ENTRADAS
+                    if category_name == 'OPERACIONAL':
+                        if 'grão' in item or 'soja' in item or 'milho' in item:
+                            return 'ENTRADAS - Recebimento de Grãos'
+                        else:
+                            return 'ENTRADAS - Operacional Outros'
+                    elif category_name == 'INVESTIMENTOS':
+                        return 'ENTRADAS - Investimentos'
+                    elif category_name == 'FINANCIAMENTO':
+                        return 'ENTRADAS - Financiamento'
+                    else:
+                        return 'ENTRADAS - Outras Receitas'
+                else:
+                    # SAÍDAS
+                    if category_name == 'OPERACIONAL':
+                        if 'grão' in item or 'soja' in item or 'milho' in item:
+                            return 'SAÍDAS - Pagamento de Grãos'
+                        elif 'frete' in item:
+                            return 'SAÍDAS - Pagamento de Frete'
+                        else:
+                            return 'SAÍDAS - Operacional Outros'
+                    elif category_name == 'DESPESAS ADMINISTRATIVAS':
+                        return 'SAÍDAS - Despesas Administrativas'
+                    elif category_name == 'IMPOSTOS':
+                        return 'SAÍDAS - Impostos'
+                    elif category_name == 'FINANCIAMENTO':
+                        return 'SAÍDAS - Financiamento'
+                    elif category_name == 'INVESTIMENTOS':
+                        return 'SAÍDAS - Investimentos'
+                    else:
+                        return 'SAÍDAS - Outras Despesas'
             
-            # Expandir os valores em colunas separadas
-            monthly_summary[['ENTRADAS', 'SAÍDAS', 'SALDO DE CAIXA']] = pd.DataFrame(
-                monthly_summary['value'].tolist(), 
-                index=monthly_summary.index
-            )
+            # Aplicar categorização
+            df_filtered['financial_category'] = df_filtered.apply(categorize_financial_flow, axis=1)
             
-            # Remover coluna temporária
-            monthly_summary = monthly_summary.drop('value', axis=1)
+            # Agrupar por categoria e mês
+            monthly_analysis = df_filtered.groupby(['financial_category', 'month_year'])['value'].sum().reset_index()
             
-            # Ordenar por data
-            monthly_summary = monthly_summary.sort_values('month_year')
+            if not monthly_analysis.empty:
+                # Pivot para ter meses como colunas e categorias como linhas
+                monthly_pivot = monthly_analysis.pivot(index='financial_category', columns='month_year', values='value').fillna(0)
+                
+                # Ordenar colunas (meses) cronologicamente
+                monthly_pivot = monthly_pivot.sort_index(axis=1)
+                
+                # Calcular totais por categoria (linha)
+                monthly_pivot['TOTAL'] = monthly_pivot.sum(axis=1)
+                
+                # Separar entradas e saídas para calcular totais
+                entradas_mask = monthly_pivot.index.str.startswith('ENTRADAS')
+                saidas_mask = monthly_pivot.index.str.startswith('SAÍDAS')
+                
+                # Calcular totais por mês (coluna)
+                total_entradas = monthly_pivot[entradas_mask].sum()
+                total_saidas = monthly_pivot[saidas_mask].sum()
+                saldo_mensal = total_entradas + total_saidas  # Saídas já são negativas
+                
+                # Adicionar linhas de totais
+                monthly_pivot.loc['TOTAL ENTRADAS'] = total_entradas
+                monthly_pivot.loc['TOTAL SAÍDAS'] = total_saidas
+                monthly_pivot.loc['SALDO DE CAIXA'] = saldo_mensal
+                
+                # Formatar colunas de mês para exibição
+                monthly_pivot.columns = [str(col) if col != 'TOTAL' else 'TOTAL' for col in monthly_pivot.columns]
+                
+                # Criar DataFrame para exibição formatado
+                display_df = monthly_pivot.copy()
+                
+                # Formatar valores monetários
+                for col in display_df.columns:
+                    display_df[col] = display_df[col].apply(format_currency)
+                
+                # Definir ordem das linhas para melhor visualização
+                entradas_categories = [idx for idx in monthly_pivot.index if idx.startswith('ENTRADAS')]
+                saidas_categories = [idx for idx in monthly_pivot.index if idx.startswith('SAÍDAS')]
+                total_lines = ['TOTAL ENTRADAS', 'TOTAL SAÍDAS', 'SALDO DE CAIXA']
+                
+                # Reordenar linhas
+                ordered_index = entradas_categories + saidas_categories + total_lines
+                display_df = display_df.reindex([idx for idx in ordered_index if idx in display_df.index])
+                
+                # Aplicar estilo para destacar totais
+                def highlight_totals(row):
+                    if row.name in ['TOTAL ENTRADAS', 'TOTAL SAÍDAS', 'SALDO DE CAIXA']:
+                        return ['background-color: #f0f0f0; font-weight: bold'] * len(row)
+                    else:
+                        return [''] * len(row)
+                
+                # Exibir tabela com estilo
+                st.dataframe(
+                    display_df.style.apply(highlight_totals, axis=1),
+                    use_container_width=True,
+                    height=600
+                )
+                
+                # Resumo final
+                st.subheader("📊 Resumo do Período")
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    total_entradas_periodo = monthly_pivot.loc['TOTAL ENTRADAS', 'TOTAL']
+                    st.metric("💰 Total ENTRADAS", format_currency(total_entradas_periodo))
+                
+                with col2:
+                    total_saidas_periodo = monthly_pivot.loc['TOTAL SAÍDAS', 'TOTAL']
+                    st.metric("💸 Total SAÍDAS", format_currency(total_saidas_periodo))
+                
+                with col3:
+                    saldo_total_periodo = monthly_pivot.loc['SALDO DE CAIXA', 'TOTAL']
+                    st.metric("📈 SALDO TOTAL", format_currency(saldo_total_periodo))
             
-            # Formatar mês/ano para exibição
-            monthly_summary['Mês/Ano'] = monthly_summary['month_year'].astype(str)
-            
-            # Criar DataFrame final para exibição
-            display_df = monthly_summary[['Mês/Ano', 'ENTRADAS', 'SAÍDAS', 'SALDO DE CAIXA']].copy()
-            
-            # Formatar valores monetários
-            for col in ['ENTRADAS', 'SAÍDAS', 'SALDO DE CAIXA']:
-                display_df[col] = display_df[col].apply(format_currency)
-            
-            # Exibir tabela
-            st.dataframe(
-                display_df, 
-                use_container_width=True, 
-                height=400,
-                hide_index=True
-            )
-            
-            # Totais gerais
-            st.subheader("📊 Totais Gerais")
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                total_entradas = monthly_summary['ENTRADAS'].sum()
-                st.metric("💰 Total ENTRADAS", format_currency(total_entradas))
-            
-            with col2:
-                total_saidas = monthly_summary['SAÍDAS'].sum()
-                st.metric("💸 Total SAÍDAS", format_currency(total_saidas))
-            
-            with col3:
-                saldo_total = monthly_summary['SALDO DE CAIXA'].sum()
-                st.metric("📈 SALDO TOTAL", format_currency(saldo_total))
+            else:
+                st.info("Nenhum dado encontrado para análise mensal.")
         
         else:
             if not date_column_found:
