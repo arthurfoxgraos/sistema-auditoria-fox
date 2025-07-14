@@ -89,7 +89,29 @@ def show_contratos_page():
     statuses = sorted(df['status_display'].dropna().unique())
     pis_options = sorted(df['pis_status'].dropna().unique()) if 'pis_status' in df.columns else []
 
-    c1, c2, c3, c4, c5 = st.columns(5)
+    # Extrair anos e meses da deliveryDate para filtros
+    if 'deliveryDate' in df.columns:
+        df['delivery_year'] = pd.to_datetime(df['deliveryDate'], errors='coerce').dt.year
+        df['delivery_month'] = pd.to_datetime(df['deliveryDate'], errors='coerce').dt.month
+        
+        # Listas para filtros
+        delivery_years = sorted([year for year in df['delivery_year'].dropna().unique() if not pd.isna(year)], reverse=True)
+        delivery_months = sorted([month for month in df['delivery_month'].dropna().unique() if not pd.isna(month)])
+        
+        # Nomes dos meses
+        month_names = {
+            1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril',
+            5: 'Maio', 6: 'Junho', 7: 'Julho', 8: 'Agosto',
+            9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro'
+        }
+        
+        year_options = ['Todos'] + [str(int(year)) for year in delivery_years]
+        month_options = ['Todos'] + [month_names[month] for month in delivery_months]
+    else:
+        year_options = ['Todos']
+        month_options = ['Todos']
+
+    c1, c2, c3, c4, c5, c6, c7 = st.columns(7)
     with c1: grain_opt = st.selectbox("Grão", ["Todos"] + grains)
     with c2: type_opt = st.selectbox("Tipo de contrato", ["Todos"] + types)
     with c3: 
@@ -99,18 +121,33 @@ def show_contratos_page():
         default_index = direction_options.index(default_direction) if default_direction in direction_options else 0
         dir_opt = st.selectbox("Fluxo", direction_options, index=default_index)
     with c4: pis_opt = st.selectbox("PIS", ["Todos"] + pis_options)
-    with c5: cli_search = st.text_input("Pesquisar cliente")
-    c6, c7 = st.columns(2)
-    with c6: status_opt = st.multiselect("Status", statuses, default=statuses)
-    with c7: date_range = st.date_input("Intervalo de criação", [min_date, max_date])
+    with c5: year_opt = st.selectbox("Ano Entrega", year_options)
+    with c6: month_opt = st.selectbox("Mês Entrega", month_options)
+    with c7: cli_search = st.text_input("Pesquisar cliente")
+    
     c8, c9 = st.columns(2)
-    with c8: deliv_range = st.date_input("Intervalo Última Entrega", [min_deliv, max_deliv])
+    with c8: status_opt = st.multiselect("Status", statuses, default=statuses)
+    with c9: date_range = st.date_input("Intervalo de criação", [min_date, max_date])
+    
+    c10, c11 = st.columns(2)
+    with c10: deliv_range = st.date_input("Intervalo Última Entrega", [min_deliv, max_deliv])
 
     df_f = df.copy()
     if grain_opt != "Todos": df_f = df_f[df_f['grain_name']==grain_opt]
     if type_opt != "Todos": df_f = df_f[df_f['contract_type']==type_opt]
     if dir_opt != "Todos": df_f = df_f[df_f['direction_type']==dir_opt]
-    if pis_opt != "Todos" and 'pis_status' in df_f.columns: df_f = df_f[df_f['pis_status']==pis_opt]
+    if pis_opt != "Todos": df_f = df_f[df_f['pis_status']==pis_opt]
+    
+    # Filtros de ano e mês de entrega
+    if year_opt != "Todos" and 'delivery_year' in df_f.columns:
+        df_f = df_f[df_f['delivery_year'] == int(year_opt)]
+    
+    if month_opt != "Todos" and 'delivery_month' in df_f.columns:
+        # Converter nome do mês para número
+        month_names_reverse = {v: k for k, v in month_names.items()}
+        selected_month = month_names_reverse.get(month_opt)
+        if selected_month:
+            df_f = df_f[df_f['delivery_month'] == selected_month]
     if cli_search: df_f = df_f[df_f['cliente'].str.contains(cli_search, case=False, na=False)]
     if status_opt: df_f = df_f[df_f['status_display'].isin(status_opt)]
     if isinstance(date_range, list):
