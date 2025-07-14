@@ -261,6 +261,86 @@ def show_financeiro_page():
                 with col3:
                     saldo_total_periodo = monthly_pivot.loc['SALDO DE CAIXA', 'TOTAL']
                     st.metric("📈 SALDO TOTAL", format_currency(saldo_total_periodo))
+                
+                # Nova seção: Despesas Administrativas Detalhadas
+                st.subheader("🏢 Despesas Administrativas - Detalhamento por Item")
+                
+                # Filtrar apenas despesas administrativas
+                df_desp_admin = df_filtered[
+                    (df_filtered['category_name'].str.upper() == 'DESPESAS ADMINISTRATIVAS') |
+                    (df_filtered['financial_category'] == 'SAÍDAS - Despesas Administrativas')
+                ].copy()
+                
+                if not df_desp_admin.empty:
+                    # Agrupar por item e mês
+                    desp_admin_analysis = df_desp_admin.groupby(['category_item', 'month_year'])['value'].sum().reset_index()
+                    
+                    if not desp_admin_analysis.empty:
+                        # Pivot para ter meses como colunas e itens como linhas
+                        desp_admin_pivot = desp_admin_analysis.pivot(
+                            index='category_item', 
+                            columns='month_year', 
+                            values='value'
+                        ).fillna(0)
+                        
+                        # Ordenar colunas (meses) cronologicamente
+                        desp_admin_pivot = desp_admin_pivot.sort_index(axis=1)
+                        
+                        # Calcular total por item (linha)
+                        desp_admin_pivot['TOTAL'] = desp_admin_pivot.sum(axis=1)
+                        
+                        # Calcular total por mês (coluna)
+                        total_por_mes = desp_admin_pivot.sum()
+                        desp_admin_pivot.loc['TOTAL MENSAL'] = total_por_mes
+                        
+                        # Formatar colunas de mês para exibição
+                        desp_admin_pivot.columns = [str(col) if col != 'TOTAL' else 'TOTAL' for col in desp_admin_pivot.columns]
+                        
+                        # Criar DataFrame para exibição formatado
+                        desp_admin_display = desp_admin_pivot.copy()
+                        
+                        # Formatar valores monetários (valores negativos)
+                        for col in desp_admin_display.columns:
+                            desp_admin_display[col] = desp_admin_display[col].apply(format_currency)
+                        
+                        # Aplicar estilo para destacar total
+                        def highlight_admin_totals(row):
+                            if row.name == 'TOTAL MENSAL':
+                                return ['background-color: #ffebee; font-weight: bold'] * len(row)
+                            else:
+                                return [''] * len(row)
+                        
+                        # Exibir tabela de despesas administrativas
+                        st.dataframe(
+                            desp_admin_display.style.apply(highlight_admin_totals, axis=1),
+                            use_container_width=True,
+                            height=400
+                        )
+                        
+                        # Resumo das despesas administrativas
+                        st.write("**📊 Resumo das Despesas Administrativas:**")
+                        col1, col2, col3 = st.columns(3)
+                        
+                        with col1:
+                            total_desp_admin = desp_admin_pivot.loc['TOTAL MENSAL', 'TOTAL']
+                            st.metric("💸 Total Despesas Admin", format_currency(total_desp_admin))
+                        
+                        with col2:
+                            # Número de itens diferentes
+                            num_itens = len(desp_admin_pivot.index) - 1  # -1 para excluir linha TOTAL MENSAL
+                            st.metric("📋 Itens Diferentes", f"{num_itens}")
+                        
+                        with col3:
+                            # Média mensal (excluindo coluna TOTAL)
+                            meses_com_dados = [col for col in desp_admin_pivot.columns if col != 'TOTAL']
+                            if meses_com_dados:
+                                media_mensal = desp_admin_pivot.loc['TOTAL MENSAL', meses_com_dados].mean()
+                                st.metric("📈 Média Mensal", format_currency(media_mensal))
+                    
+                    else:
+                        st.info("Nenhuma despesa administrativa encontrada para análise detalhada.")
+                else:
+                    st.info("Nenhuma despesa administrativa encontrada no período selecionado.")
             
             else:
                 st.info("Nenhum dado encontrado para análise mensal.")
