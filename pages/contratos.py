@@ -129,7 +129,18 @@ def show_contratos_page():
     with c6: month_opt = st.selectbox("Mês Entrega", month_options)
     with c7: cli_search = st.text_input("Pesquisar cliente")
     
-    df['cliente'] = df.apply(lambda r: r['buyer_name'] if r['direction_type'] != 'Originação' else r['seller_name'], axis=1)
+    # Definir cliente baseado no tipo de contrato e direção
+    def define_cliente(row):
+        # Para contratos de frete, sempre usar seller_name
+        if row.get('contract_type') == '🚛 Frete':
+            return row.get('seller_name', 'N/A')
+        # Para outros tipos, usar regra original
+        elif row.get('direction_type') != 'Originação':
+            return row.get('buyer_name', 'N/A')
+        else:
+            return row.get('seller_name', 'N/A')
+    
+    df['cliente'] = df.apply(define_cliente, axis=1)
     
     c8, c9 = st.columns(2)
     with c8: status_opt = st.multiselect("Status", statuses, default=statuses)
