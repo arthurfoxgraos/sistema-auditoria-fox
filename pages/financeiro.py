@@ -135,12 +135,12 @@ def show_financeiro_page():
         
         st.divider()
         
-        # Consolidado por item
-        st.subheader("📋 Consolidado por Item")
+        # Consolidado por categoria
+        st.subheader("📋 Consolidado por Categoria")
         
-        if 'category_item' in df_filtered.columns:
-            # Agrupar por item e calcular totais
-            consolidado = df_filtered.groupby('category_item').agg({
+        if 'category_name' in df_filtered.columns:
+            # Agrupar por categoria e calcular totais
+            consolidado = df_filtered.groupby('category_name').agg({
                 'value': ['sum', 'count', 'mean']
             }).round(2)
             
@@ -158,7 +158,7 @@ def show_financeiro_page():
             consolidado_display['Percentual'] = consolidado_display['Percentual'].apply(lambda x: f"{x}%")
             
             # Renomear índice
-            consolidado_display.index.name = 'Item'
+            consolidado_display.index.name = 'Categoria'
             
             # Exibir tabela consolidada
             st.dataframe(
@@ -167,18 +167,17 @@ def show_financeiro_page():
                 height=400
             )
             
-            # Gráfico de pizza dos principais itens
+            # Gráfico de pizza das categorias
             col1, col2 = st.columns(2)
             
             with col1:
-                # Top 10 itens
-                top_items = consolidado.head(10)
-                if len(top_items) > 0:
+                # Todas as categorias
+                if len(consolidado) > 0:
                     import plotly.express as px
                     fig = px.pie(
-                        values=top_items['Total'],
-                        names=top_items.index,
-                        title="Top 10 Itens - Distribuição de Valores"
+                        values=consolidado['Total'],
+                        names=consolidado.index,
+                        title="Distribuição por Categoria"
                     )
                     fig.update_traces(textposition='inside', textinfo='percent+label')
                     st.plotly_chart(fig, use_container_width=True)
@@ -187,19 +186,18 @@ def show_financeiro_page():
                 # Gráfico de barras
                 if len(consolidado) > 0:
                     import plotly.express as px
-                    top_items_bar = consolidado.head(10)
                     fig_bar = px.bar(
-                        x=top_items_bar['Total'],
-                        y=top_items_bar.index,
+                        x=consolidado['Total'],
+                        y=consolidado.index,
                         orientation='h',
-                        title="Top 10 Itens - Valores",
-                        labels={'x': 'Valor Total', 'y': 'Item'}
+                        title="Valores por Categoria",
+                        labels={'x': 'Valor Total', 'y': 'Categoria'}
                     )
                     fig_bar.update_layout(yaxis={'categoryorder': 'total ascending'})
                     st.plotly_chart(fig_bar, use_container_width=True)
         
         else:
-            st.warning("Campo 'category_item' não encontrado nos dados para consolidação.")
+            st.warning("Campo 'category_name' não encontrado nos dados para consolidação.")
             
     else:
         st.info("Nenhum registro encontrado com os filtros aplicados.")
