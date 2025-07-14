@@ -52,7 +52,9 @@ def show_cargas_page():
     
     # Filtros
     st.subheader("🔍 Filtros")
-    col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
+    
+    # Primeira linha de filtros (4 colunas)
+    col1, col2, col3, col4 = st.columns(4)
     
     with col1:
         if 'status' in df_tickets.columns:
@@ -91,6 +93,9 @@ def show_cargas_page():
             options=grain_options,
             key="grain_filter"
         )
+    
+    # Segunda linha de filtros (3 colunas)
+    col5, col6, col7 = st.columns(3)
     
     with col5:
         # Filtro por intervalo de datas

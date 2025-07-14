@@ -33,8 +33,19 @@ st.markdown("""
     /* Margem full - usar toda largura da tela */
     .main .block-container {
         max-width: 100%;
-        padding-left: 1rem;
-        padding-right: 1rem;
+        padding-left: 2rem;
+        padding-right: 2rem;
+        padding-top: 1rem;
+    }
+    
+    /* Espaçamento entre elementos */
+    .stSelectbox > div > div {
+        margin-bottom: 0.5rem;
+    }
+    
+    /* Melhorar espaçamento dos filtros */
+    .stColumn {
+        padding: 0 0.5rem;
     }
     
     /* Remover padding extra */
@@ -45,6 +56,18 @@ st.markdown("""
     /* Maximizar largura dos dataframes */
     .stDataFrame {
         width: 100%;
+    }
+    
+    /* Melhorar aparência dos selectbox */
+    .stSelectbox label {
+        font-weight: 600;
+        color: #262730;
+    }
+    
+    /* Espaçamento entre seções */
+    .stSubheader {
+        margin-top: 2rem;
+        margin-bottom: 1rem;
     }
     
     .main-header {
