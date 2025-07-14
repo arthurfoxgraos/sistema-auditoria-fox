@@ -82,7 +82,7 @@ def show_financeiro_page():
         # Filtro por ano
         if 'date' in df_finances.columns and not df_finances['date'].isna().all():
             years = sorted(df_finances['date'].dt.year.dropna().unique(), reverse=True)
-            year_options = ['Todos'] + [str(year) for year in years]
+            year_options = ['Todos'] + [str(int(year)) for year in years]
             year_filter = st.selectbox("Ano:", year_options)
         else:
             year_filter = "Todos"
@@ -96,7 +96,7 @@ def show_financeiro_page():
                 9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro'
             }
             months = sorted([int(month) for month in df_finances['date'].dt.month.dropna().unique()])
-            month_options = ['Todos'] + [f"{month:02d} - {month_names[month]}" for month in months]
+            month_options = ['Todos'] + [month_names[month] for month in months]
             month_filter = st.selectbox("Mês:", month_options)
         else:
             month_filter = "Todos"
@@ -114,7 +114,13 @@ def show_financeiro_page():
     
     # Filtro por mês
     if month_filter != "Todos" and 'date' in df_filtered.columns:
-        month_number = int(month_filter.split(' - ')[0])
+        # Converter nome do mês para número
+        month_names_reverse = {
+            'Janeiro': 1, 'Fevereiro': 2, 'Março': 3, 'Abril': 4,
+            'Maio': 5, 'Junho': 6, 'Julho': 7, 'Agosto': 8,
+            'Setembro': 9, 'Outubro': 10, 'Novembro': 11, 'Dezembro': 12
+        }
+        month_number = month_names_reverse[month_filter]
         df_filtered = df_filtered[df_filtered['date'].dt.month == month_number]
 
     # Mostrar resultados
