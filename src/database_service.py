@@ -390,7 +390,10 @@ class DatabaseService:
                             {"$arrayElemAt": ["$user_info.name", 0]},
                             {"$arrayElemAt": ["$user_info.companyName", 0]}
                         ]
-                    }
+                    },
+                    # Garantir que o campo date seja preservado
+                    "date": "$date",
+                    "value": "$value"
                 }
             },
             {"$sort": {"date": -1}}

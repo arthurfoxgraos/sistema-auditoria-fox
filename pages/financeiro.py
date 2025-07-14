@@ -45,29 +45,49 @@ def show_financeiro_page():
     df_finances = load_finances_data()
     
     if df_finances is not None and not df_finances.empty:
-        # Converter coluna de data
+        # Debug: mostrar colunas disponíveis
+        st.write("Debug - Colunas disponíveis:", list(df_finances.columns))
+        
+        # Converter coluna de data - tratamento mais robusto
+        date_column_found = False
         if 'date' in df_finances.columns:
-            df_finances['date'] = pd.to_datetime(df_finances['date'], format='%Y%m%d%H%M%S', errors='coerce')
+            try:
+                # Tentar diferentes formatos de data
+                df_finances['date'] = pd.to_datetime(df_finances['date'], format='%Y%m%d%H%M%S', errors='coerce')
+                if df_finances['date'].notna().any():
+                    date_column_found = True
+                else:
+                    # Tentar outros formatos
+                    df_finances['date'] = pd.to_datetime(df_finances['date'], errors='coerce')
+                    if df_finances['date'].notna().any():
+                        date_column_found = True
+            except Exception as e:
+                st.warning(f"Erro ao converter campo date: {e}")
         
         # Filtro por ano
         st.subheader("🔍 Filtro")
-        if 'date' in df_finances.columns and not df_finances['date'].isna().all():
+        if date_column_found:
             years = sorted([int(year) for year in df_finances['date'].dt.year.dropna().unique()], reverse=True)
             year_options = ['Todos'] + [str(year) for year in years]
             year_filter = st.selectbox("Ano:", year_options, index=0)
         else:
             year_filter = "Todos"
-            st.warning("Campo 'date' não encontrado ou vazio nos dados.")
+            st.warning("Campo 'date' não encontrado ou vazio nos dados. Mostrando todos os dados disponíveis.")
+            
+            # Mostrar amostra dos dados para debug
+            if not df_finances.empty:
+                st.write("Amostra dos dados (primeiras 5 linhas):")
+                st.write(df_finances.head())
         
         # Aplicar filtro por ano
         df_filtered = df_finances.copy()
-        if year_filter != "Todos" and 'date' in df_filtered.columns:
+        if year_filter != "Todos" and date_column_found:
             df_filtered = df_filtered[df_filtered['date'].dt.year == int(year_filter)]
         
         # Análise Mensal - Fluxo de Caixa
         st.subheader("📅 Análise Mensal - Fluxo de Caixa")
         
-        if 'date' in df_filtered.columns and not df_filtered['date'].isna().all() and not df_filtered.empty:
+        if date_column_found and not df_filtered.empty:
             # Criar coluna de mês/ano
             df_filtered['month_year'] = df_filtered['date'].dt.to_period('M')
             
@@ -276,7 +296,32 @@ def show_financeiro_page():
                 st.info("Nenhum dado encontrado para análise mensal de fluxo de caixa.")
         
         else:
-            st.warning("Campo 'date' não encontrado, vazio ou nenhum dado após filtros para análise mensal.")
+            if not date_column_found:
+                st.warning("Campo 'date' não encontrado ou inválido. Não é possível realizar análise mensal.")
+                
+                # Mostrar análise simples por categoria se possível
+                if 'category_name' in df_filtered.columns and 'value' in df_filtered.columns:
+                    st.subheader("📊 Análise por Categoria (sem data)")
+                    
+                    category_summary = df_filtered.groupby('category_name')['value'].sum().sort_values(ascending=False)
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.write("**Totais por Categoria:**")
+                        for category, value in category_summary.items():
+                            st.write(f"- {category}: {format_currency(value)}")
+                    
+                    with col2:
+                        if len(category_summary) > 0:
+                            import plotly.express as px
+                            fig = px.pie(
+                                values=category_summary.abs(),
+                                names=category_summary.index,
+                                title="Distribuição por Categoria"
+                            )
+                            st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("Nenhum dado após aplicar filtros.")
             
     else:
         st.info("Nenhum dado financeiro encontrado.")
