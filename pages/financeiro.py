@@ -60,7 +60,7 @@ def show_financeiro_page():
 
     # Filtros
     st.subheader("🔍 Filtros")
-    col1, col2 = st.columns(2)
+    col1, col2, col3, col4 = st.columns(4)
 
     with col1:
         # Filtro por usuário
@@ -77,6 +77,29 @@ def show_financeiro_page():
             item_filter = st.selectbox("Item:", item_options)
         else:
             item_filter = "Todos"
+    
+    with col3:
+        # Filtro por ano
+        if 'date' in df_finances.columns and not df_finances['date'].isna().all():
+            years = sorted(df_finances['date'].dt.year.dropna().unique(), reverse=True)
+            year_options = ['Todos'] + [str(year) for year in years]
+            year_filter = st.selectbox("Ano:", year_options)
+        else:
+            year_filter = "Todos"
+    
+    with col4:
+        # Filtro por mês
+        if 'date' in df_finances.columns and not df_finances['date'].isna().all():
+            month_names = {
+                1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril',
+                5: 'Maio', 6: 'Junho', 7: 'Julho', 8: 'Agosto',
+                9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro'
+            }
+            months = sorted(df_finances['date'].dt.month.dropna().unique())
+            month_options = ['Todos'] + [f"{month:02d} - {month_names[month]}" for month in months]
+            month_filter = st.selectbox("Mês:", month_options)
+        else:
+            month_filter = "Todos"
 
     # Aplicar filtros
     df_filtered = df_finances.copy()
@@ -84,6 +107,15 @@ def show_financeiro_page():
         df_filtered = df_filtered[df_filtered['user_name'] == user_filter]
     if item_filter != "Todos" and 'category_item' in df_filtered.columns:
         df_filtered = df_filtered[df_filtered['category_item'] == item_filter]
+    
+    # Filtro por ano
+    if year_filter != "Todos" and 'date' in df_filtered.columns:
+        df_filtered = df_filtered[df_filtered['date'].dt.year == int(year_filter)]
+    
+    # Filtro por mês
+    if month_filter != "Todos" and 'date' in df_filtered.columns:
+        month_number = int(month_filter.split(' - ')[0])
+        df_filtered = df_filtered[df_filtered['date'].dt.month == month_number]
 
     # Mostrar resultados
     st.subheader(f"📊 Resultados: {len(df_filtered)} registros financeiros")
