@@ -95,7 +95,7 @@ def show_financeiro_page():
                 5: 'Maio', 6: 'Junho', 7: 'Julho', 8: 'Agosto',
                 9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro'
             }
-            months = sorted(df_finances['date'].dt.month.dropna().unique())
+            months = sorted([int(month) for month in df_finances['date'].dt.month.dropna().unique()])
             month_options = ['Todos'] + [f"{month:02d} - {month_names[month]}" for month in months]
             month_filter = st.selectbox("Mês:", month_options)
         else:
