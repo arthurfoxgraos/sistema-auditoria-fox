@@ -350,16 +350,13 @@ class DatabaseService:
             end_of_year = datetime(current_year, 12, 31, 23, 59, 59)
             
         pipeline = [
-            # Filtro por ano em exercício e isIgnored
+            # Filtro apenas por isIgnored (removendo filtro de ano temporariamente)
             {
                 "$match": {
-                    "$and": [
-                        {"date": {"$gte": start_of_year, "$lte": end_of_year}},
-                        {"$or": [
-                            {"isIgnored": {"$exists": False}},
-                            {"isIgnored": None},
-                            {"isIgnored": False}
-                        ]}
+                    "$or": [
+                        {"isIgnored": {"$exists": False}},
+                        {"isIgnored": None},
+                        {"isIgnored": False}
                     ]
                 }
             },
