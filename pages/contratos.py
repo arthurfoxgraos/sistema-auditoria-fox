@@ -112,8 +112,67 @@ def show_contratos_page():
     df_f['Data Pagamento'] = df_f['deliveryDate'] + pd.to_timedelta(df_f['Prazo Pagamento (dias)'], unit='d')
 
     df_f['total'] = df_f['amount'] * df_f['bagPrice']
-    st.metric("Total de Sacas", f"{int(df_f['amount'].sum()):,}".replace(',', '.'))
-    st.metric("Valor Total (R$)", f"R$ {df_f['total'].sum():,.2f}".replace(',', 'X').replace('.', ',').replace('X','.'))
+    
+    # Cards de métricas
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("Total de Sacas", f"{int(df_f['amount'].sum()):,}".replace(',', '.'))
+    
+    with col2:
+        st.metric("Valor Total (R$)", f"R$ {df_f['total'].sum():,.2f}".replace(',', 'X').replace('.', ',').replace('X','.'))
+    
+    with col3:
+        # Número de clientes únicos
+        unique_clients = df_f['cliente'].nunique()
+        st.metric("Número de Clientes", f"{unique_clients}")
+    
+    with col4:
+        # Volume médio por cliente
+        avg_volume_per_client = df_f['amount'].sum() / unique_clients if unique_clients > 0 else 0
+        st.metric("Volume Médio/Cliente", f"{int(avg_volume_per_client):,}".replace(',', '.'))
+    
+    # Análise de volumes por cliente
+    st.subheader("📊 Volumes Comercializados por Cliente")
+    
+    # Calcular volumes por cliente
+    client_volumes = df_f.groupby('cliente').agg({
+        'amount': 'sum',
+        'total': 'sum',
+        '_id': 'count'  # número de contratos
+    }).round(2)
+    client_volumes.columns = ['Volume (Sacas)', 'Valor Total (R$)', 'Nº Contratos']
+    client_volumes = client_volumes.sort_values('Volume (Sacas)', ascending=False)
+    
+    # Top 10 clientes
+    top_clients = client_volumes.head(10).copy()
+    
+    # Formatar valores para exibição
+    top_clients['Volume (Sacas)'] = top_clients['Volume (Sacas)'].astype(int).apply(lambda x: f"{x:,}".replace(',', '.'))
+    top_clients['Valor Total (R$)'] = top_clients['Valor Total (R$)'].apply(lambda x: f"R$ {x:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
+    
+    # Exibir tabela dos top clientes
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        st.write("**Top 10 Clientes por Volume:**")
+        st.dataframe(top_clients, use_container_width=True)
+    
+    with col2:
+        # Gráfico de pizza dos top 5 clientes
+        import plotly.express as px
+        
+        top5_data = client_volumes.head(5)
+        if not top5_data.empty:
+            fig = px.pie(
+                values=top5_data['Volume (Sacas)'].astype(float),
+                names=top5_data.index,
+                title="Top 5 Clientes - Distribuição de Volume"
+            )
+            fig.update_traces(textposition='inside', textinfo='percent+label')
+            st.plotly_chart(fig, use_container_width=True)
+    
+    st.divider()
 
     display_map = {
         'Status':'status_display','Última Carga':'loadingDate','Data Pagamento':'Data Pagamento',
