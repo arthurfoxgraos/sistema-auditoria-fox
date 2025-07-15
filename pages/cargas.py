@@ -128,7 +128,23 @@ def show_cargas_page():
         )
     
     with col7:
-        # Filtro por comprador
+        # Filtro por produtor (seller quando é originação)
+        producer_options = ["Todos"]
+        if 'seller_name' in df_tickets.columns:
+            unique_producers = df_tickets['seller_name'].dropna().unique()
+            producer_options.extend(sorted(unique_producers))
+        
+        producer_filter = st.selectbox(
+            "Produtor:",
+            options=producer_options,
+            key="producer_filter"
+        )
+    
+    # Terceira linha de filtros (1 coluna)
+    col8, col9, col10 = st.columns(3)
+    
+    with col8:
+        # Filtro por comprador (movido para terceira linha)
         buyer_options = ["Todos"]
         if 'buyer_name' in df_tickets.columns:
             unique_buyers = df_tickets['buyer_name'].dropna().unique()
@@ -181,6 +197,10 @@ def show_cargas_page():
     # Filtro por comprador
     if buyer_filter != "Todos" and 'buyer_name' in df_filtered.columns:
         df_filtered = df_filtered[df_filtered['buyer_name'] == buyer_filter]
+    
+    # Filtro por produtor
+    if producer_filter != "Todos" and 'seller_name' in df_filtered.columns:
+        df_filtered = df_filtered[df_filtered['seller_name'] == producer_filter]
     
     # Mostrar resultados
     st.subheader(f"📊 Resultados: {len(df_filtered)} cargas (apenas 2025+)")
