@@ -50,6 +50,36 @@ def show_cargas_page():
         st.warning("Nenhuma carga encontrada.")
         return
     
+    # Função para extrair últimos 6 dígitos de um código
+    def get_last_6_digits(code):
+        if pd.isna(code) or code is None:
+            return ""
+        code_str = str(code)
+        return code_str[-6:] if len(code_str) >= 6 else code_str
+    
+    # Adicionar códigos de contrato aos nomes
+    if 'seller_name' in df_tickets.columns:
+        # Para produtor, usar contrato de origem (originOrder)
+        if 'originOrder' in df_tickets.columns:
+            df_tickets['seller_display'] = df_tickets.apply(
+                lambda row: f"[{get_last_6_digits(row.get('originOrder', ''))}] {row.get('seller_name', 'N/A')}" 
+                if get_last_6_digits(row.get('originOrder', '')) else row.get('seller_name', 'N/A'), 
+                axis=1
+            )
+        else:
+            df_tickets['seller_display'] = df_tickets['seller_name']
+    
+    if 'buyer_name' in df_tickets.columns:
+        # Para comprador, usar contrato de destino (destinationOrder)
+        if 'destinationOrder' in df_tickets.columns:
+            df_tickets['buyer_display'] = df_tickets.apply(
+                lambda row: f"[{get_last_6_digits(row.get('destinationOrder', ''))}] {row.get('buyer_name', 'N/A')}" 
+                if get_last_6_digits(row.get('destinationOrder', '')) else row.get('buyer_name', 'N/A'), 
+                axis=1
+            )
+        else:
+            df_tickets['buyer_display'] = df_tickets['buyer_name']
+    
     # Filtros
     st.subheader("🔍 Filtros")
     
@@ -130,8 +160,8 @@ def show_cargas_page():
     with col7:
         # Filtro por produtor (múltipla seleção)
         producer_options = []
-        if 'seller_name' in df_tickets.columns:
-            unique_producers = df_tickets['seller_name'].dropna().unique()
+        if 'seller_display' in df_tickets.columns:
+            unique_producers = df_tickets['seller_display'].dropna().unique()
             producer_options = sorted(unique_producers)
         
         producer_filter = st.multiselect(
@@ -147,8 +177,8 @@ def show_cargas_page():
     with col8:
         # Filtro por comprador (movido para terceira linha)
         buyer_options = ["Todos"]
-        if 'buyer_name' in df_tickets.columns:
-            unique_buyers = df_tickets['buyer_name'].dropna().unique()
+        if 'buyer_display' in df_tickets.columns:
+            unique_buyers = df_tickets['buyer_display'].dropna().unique()
             buyer_options.extend(sorted(unique_buyers))
         
         buyer_filter = st.selectbox(
@@ -196,12 +226,12 @@ def show_cargas_page():
         df_filtered = df_filtered[df_filtered['contract_type'] == contract_filter]
     
     # Filtro por comprador
-    if buyer_filter != "Todos" and 'buyer_name' in df_filtered.columns:
-        df_filtered = df_filtered[df_filtered['buyer_name'] == buyer_filter]
+    if buyer_filter != "Todos" and 'buyer_display' in df_filtered.columns:
+        df_filtered = df_filtered[df_filtered['buyer_display'] == buyer_filter]
     
     # Filtro por produtor (múltiplos)
-    if producer_filter and 'seller_name' in df_filtered.columns:
-        df_filtered = df_filtered[df_filtered['seller_name'].isin(producer_filter)]
+    if producer_filter and 'seller_display' in df_filtered.columns:
+        df_filtered = df_filtered[df_filtered['seller_display'].isin(producer_filter)]
     
     # Mostrar resultados
     st.subheader(f"📊 Resultados: {len(df_filtered)} cargas (apenas 2025+)")
@@ -256,8 +286,8 @@ def show_cargas_page():
             'paid_status': 'Pago',
             'ticket': 'Nro Ticket',
             'loadingDate': 'Data de Carregamento', 
-            'buyer_name': 'Comprador',
-            'seller_name': 'Vendedor',
+            'buyer_display': 'Comprador',
+            'seller_display': 'Vendedor',
             'driver_name': 'Caminhoneiro',
             'grain_name': 'Grão',
             'contract_type': 'Tipo Contrato',
