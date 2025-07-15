@@ -128,16 +128,17 @@ def show_cargas_page():
         )
     
     with col7:
-        # Filtro por produtor (seller quando é originação)
-        producer_options = ["Todos"]
+        # Filtro por produtor (múltipla seleção)
+        producer_options = []
         if 'seller_name' in df_tickets.columns:
             unique_producers = df_tickets['seller_name'].dropna().unique()
-            producer_options.extend(sorted(unique_producers))
+            producer_options = sorted(unique_producers)
         
-        producer_filter = st.selectbox(
-            "Produtor:",
+        producer_filter = st.multiselect(
+            "Produtor(es):",
             options=producer_options,
-            key="producer_filter"
+            key="producer_filter",
+            help="Selecione um ou mais produtores (deixe vazio para todos)"
         )
     
     # Terceira linha de filtros (1 coluna)
@@ -198,9 +199,9 @@ def show_cargas_page():
     if buyer_filter != "Todos" and 'buyer_name' in df_filtered.columns:
         df_filtered = df_filtered[df_filtered['buyer_name'] == buyer_filter]
     
-    # Filtro por produtor
-    if producer_filter != "Todos" and 'seller_name' in df_filtered.columns:
-        df_filtered = df_filtered[df_filtered['seller_name'] == producer_filter]
+    # Filtro por produtor (múltiplos)
+    if producer_filter and 'seller_name' in df_filtered.columns:
+        df_filtered = df_filtered[df_filtered['seller_name'].isin(producer_filter)]
     
     # Mostrar resultados
     st.subheader(f"📊 Resultados: {len(df_filtered)} cargas (apenas 2025+)")
