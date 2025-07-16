@@ -428,11 +428,42 @@ class ProvisioningService:
         return pd.DataFrame(processed_data)
     
     def get_simple_provisionings_table(self) -> pd.DataFrame:
-        """Retorna DataFrame simples com comprador, vendedor, destinationOrder, originOrder, amount e grain"""
+        """Retorna DataFrame com lookups de grains e orderv2 incluindo bagPrice de origem e destino"""
         pipeline = [
             # Unwind das sellersOrders
             {"$unwind": "$sellersOrders"},
-            # Projetar os campos conforme nova especificação
+            
+            # Lookup com grains
+            {
+                "$lookup": {
+                    "from": "grains",
+                    "localField": "grain",
+                    "foreignField": "_id",
+                    "as": "grain_info"
+                }
+            },
+            
+            # Lookup com orderv2 para destinationOrder (provisionamento)
+            {
+                "$lookup": {
+                    "from": "orderv2",
+                    "localField": "_id",
+                    "foreignField": "_id",
+                    "as": "destination_order_info"
+                }
+            },
+            
+            # Lookup com orderv2 para originOrder (sellersOrders)
+            {
+                "$lookup": {
+                    "from": "orderv2",
+                    "localField": "sellersOrders._id",
+                    "foreignField": "_id",
+                    "as": "origin_order_info"
+                }
+            },
+            
+            # Projetar os campos com informações dos lookups
             {
                 "$project": {
                     "comprador": "$user",
@@ -440,7 +471,11 @@ class ProvisioningService:
                     "destinationOrder": "$_id",
                     "originOrder": "$sellersOrders._id",
                     "amount": "$sellersOrders.amountRemaining",
-                    "grain": 1
+                    "grain": "$grain",
+                    "grain_name": {"$arrayElemAt": ["$grain_info.name", 0]},
+                    "destination_bagPrice": {"$arrayElemAt": ["$destination_order_info.bagPrice", 0]},
+                    "origin_bagPrice": {"$arrayElemAt": ["$origin_order_info.bagPrice", 0]},
+                    "provisioning_bagPrice": "$bagPrice"
                 }
             }
         ]
@@ -460,13 +495,17 @@ class ProvisioningService:
                     'destinationOrder': str(result.get('destinationOrder', 'N/A')),
                     'originOrder': str(result.get('originOrder', 'N/A')),
                     'amount': result.get('amount', 0),
-                    'grain': str(result.get('grain', 'N/A'))
+                    'grain': str(result.get('grain', 'N/A')),
+                    'grain_name': result.get('grain_name', 'N/A'),
+                    'destination_bagPrice': result.get('destination_bagPrice', 0),
+                    'origin_bagPrice': result.get('origin_bagPrice', 0),
+                    'provisioning_bagPrice': result.get('provisioning_bagPrice', 0)
                 })
             
             return pd.DataFrame(data)
             
         except Exception as e:
-            print(f"Erro ao buscar provisionamentos simples: {e}")
+            print(f"Erro ao buscar provisionamentos com lookups: {e}")
             return pd.DataFrame()
     
     def get_alertas_provisionamento(self) -> Dict[str, List]:

@@ -26,7 +26,7 @@ def show_provisionamento_page():
     if not df_provisionings.empty:
         st.subheader(f"📋 Provisionamentos: {len(df_provisionings)} registros")
         
-        # Tabela simples conforme consulta
+        # Tabela com lookups de grains e orderv2
         st.dataframe(
             df_provisionings,
             use_container_width=True,
@@ -36,7 +36,11 @@ def show_provisionamento_page():
                 'destinationOrder': 'Destination Order',
                 'originOrder': 'Origin Order', 
                 'amount': st.column_config.NumberColumn('Amount Remaining', format="%.0f"),
-                'grain': 'Grain'
+                'grain': 'Grain ID',
+                'grain_name': 'Grain Name',
+                'destination_bagPrice': st.column_config.NumberColumn('Destination Bag Price', format="R$ %.2f"),
+                'origin_bagPrice': st.column_config.NumberColumn('Origin Bag Price', format="R$ %.2f"),
+                'provisioning_bagPrice': st.column_config.NumberColumn('Provisioning Bag Price', format="R$ %.2f")
             }
         )
         
