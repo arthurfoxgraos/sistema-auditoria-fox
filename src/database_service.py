@@ -29,25 +29,27 @@ class DatabaseService:
                 "loadingDate": {"$gte": datetime(2025, 1, 1)},
                 "status": {"$ne": "Cancelado"}
             }},
-            # Lookup com orderv2 para destinationOrder
+            # Unwind das transactions para processar cada transação individualmente
+            {"$unwind": "$transactions"},
+            # Lookup com orderv2 para destinationOrder das transactions
             {
                 "$lookup": {
                     "from": "orderv2",
-                    "localField": "destinationOrder",
+                    "localField": "transactions.destinationOrder",
                     "foreignField": "_id",
                     "as": "destination_order_info"
                 }
             },
-            # Lookup com orderv2 para originOrder
+            # Lookup com orderv2 para originOrder das transactions
             {
                 "$lookup": {
                     "from": "orderv2",
-                    "localField": "originOrder",
+                    "localField": "transactions.originOrder",
                     "foreignField": "_id",
                     "as": "origin_order_info"
                 }
             },
-            # Lookup com users para buyer (do destinationOrder)
+            # Lookup com users para buyer (do destinationOrder das transactions)
             {
                 "$lookup": {
                     "from": "users",
@@ -56,7 +58,7 @@ class DatabaseService:
                     "as": "buyer_info"
                 }
             },
-            # Lookup com users para seller (do originOrder)
+            # Lookup com users para seller (do originOrder das transactions)
             {
                 "$lookup": {
                     "from": "users",
@@ -74,7 +76,7 @@ class DatabaseService:
                     "as": "driver_info"
                 }
             },
-            # Lookup com grains através do destinationOrder
+            # Lookup com grains através do destinationOrder das transactions
             {
                 "$lookup": {
                     "from": "grains",
@@ -113,7 +115,7 @@ class DatabaseService:
                             "else": "⏰"
                         }
                     },
-                    # Determinar tipo de contrato baseado no originOrder
+                    # Determinar tipo de contrato baseado no originOrder das transactions
                     "contract_type": {
                         "$cond": {
                             "if": {"$eq": [{"$arrayElemAt": ["$origin_order_info.isGrain", 0]}, True]},
@@ -129,36 +131,36 @@ class DatabaseService:
                     },
                     "is_grain_contract": {"$arrayElemAt": ["$origin_order_info.isGrain", 0]},
                     "is_freight_contract": {"$arrayElemAt": ["$origin_order_info.isFreight", 0]},
-                    # Extrair amount do array transactions
-                    "amount": {"$sum": "$transactions.amount"},
-                    # Status de provisioning das transactions
+                    # Amount da transação individual
+                    "amount": "$transactions.amount",
+                    # Status de provisioning da transação individual
                     "provisioning_status": {
                         "$cond": {
-                            "if": {"$eq": [{"$arrayElemAt": ["$transactions.provisioning", 0]}, True]},
+                            "if": {"$eq": ["$transactions.provisioning", True]},
                             "then": "✅ Conforme",
                             "else": "❌ Não Conforme"
                         }
                     },
-                    "is_provisioning_compliant": {"$arrayElemAt": ["$transactions.provisioning", 0]},
+                    "is_provisioning_compliant": "$transactions.provisioning",
                     # Valores de frete
                     "freight_value_per_bag": "$freightValue",
                     "total_freight_value": {
                         "$multiply": [
                             {"$ifNull": ["$freightValue", 0]},
-                            {"$sum": "$transactions.amount"}
+                            "$transactions.amount"
                         ]
                     },
                     # Valores de receita e custo
                     "revenue_value": {
                         "$multiply": [
                             {"$ifNull": [{"$arrayElemAt": ["$destination_order_info.bagPrice", 0]}, 0]},
-                            {"$sum": "$transactions.amount"}
+                            "$transactions.amount"
                         ]
                     },
                     "cost_value": {
                         "$multiply": [
                             {"$ifNull": [{"$arrayElemAt": ["$origin_order_info.bagPrice", 0]}, 0]},
-                            {"$sum": "$transactions.amount"}
+                            "$transactions.amount"
                         ]
                     },
                     "destination_bag_price": {"$arrayElemAt": ["$destination_order_info.bagPrice", 0]},
@@ -169,30 +171,33 @@ class DatabaseService:
                             {"$subtract": [
                                 {"$multiply": [
                                     {"$ifNull": [{"$arrayElemAt": ["$destination_order_info.bagPrice", 0]}, 0]},
-                                    {"$sum": "$transactions.amount"}
+                                    "$transactions.amount"
                                 ]},
                                 {"$multiply": [
                                     {"$ifNull": [{"$arrayElemAt": ["$origin_order_info.bagPrice", 0]}, 0]},
-                                    {"$sum": "$transactions.amount"}
+                                    "$transactions.amount"
                                 ]}
                             ]},
                             {"$multiply": [
                                 {"$ifNull": ["$freightValue", 0]},
-                                {"$sum": "$transactions.amount"}
+                                "$transactions.amount"
                             ]}
                         ]
                     },
-                    "transaction_distance": {"$avg": "$transactions.distanceInKm"},
-                    "transaction_value": {"$sum": "$transactions.valueGrainReceive"}
+                    "transaction_distance": "$transactions.distanceInKm",
+                    "transaction_value": "$transactions.valueGrainReceive",
+                    # Adicionar campos de contrato das transactions
+                    "destinationOrder": "$transactions.destinationOrder",
+                    "originOrder": "$transactions.originOrder"
                 }
             },
-            # Lookup com provisionamentos para verificar conformidade
+            # Lookup com provisionamentos para verificar conformidade usando IDs das transactions
             {
                 "$lookup": {
                     "from": "provisionings",
                     "let": {
-                        "dest_order": "$destinationOrder",
-                        "orig_order": "$originOrder"
+                        "dest_order": "$transactions.destinationOrder",
+                        "orig_order": "$transactions.originOrder"
                     },
                     "pipeline": [
                         {
