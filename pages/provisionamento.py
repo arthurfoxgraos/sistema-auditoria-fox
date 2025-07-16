@@ -69,7 +69,7 @@ def show_provisionamento_page():
     with col1:
         tipo_filter = st.selectbox(
             "Tipo:",
-            ["Todos", "Grão", "Frete"]
+            ["Todos", "🌾 Grão", "🚛 Frete", "❓ Outro"]
         )
     
     with col2:
@@ -79,22 +79,25 @@ def show_provisionamento_page():
         )
     
     with col3:
-        user_filter = st.text_input("Filtrar por usuário:")
+        comprador_filter = st.text_input("Filtrar por comprador:")
     
-    # Carregar dados de provisionamento
-    with st.spinner("Carregando dados de provisionamento..."):
-        df_prov = prov_service.get_provisionings_dataframe(limit=1000)
+    # Nova seção: Tabela agrupada por comprador e vendedor
+    st.subheader("📊 Provisionamento por Comprador e Vendedor")
     
-    if not df_prov.empty:
+    # Carregar dados com unwind de sellersOrders
+    with st.spinner("Carregando dados detalhados de provisionamento..."):
+        df_grouped = prov_service.get_provisionings_grouped_dataframe(limit=1000)
+    
+    if not df_grouped.empty:
         # Aplicar filtros
-        df_filtered = df_prov.copy()
+        df_filtered = df_grouped.copy()
         
         if tipo_filter != "Todos":
             df_filtered = df_filtered[df_filtered['tipo'] == tipo_filter]
         
-        if user_filter:
+        if comprador_filter:
             df_filtered = df_filtered[
-                df_filtered['usuario'].str.contains(user_filter, case=False, na=False)
+                df_filtered['comprador'].str.contains(comprador_filter, case=False, na=False)
             ]
         
         if date_filter:
@@ -103,66 +106,114 @@ def show_provisionamento_page():
             ]
         
         # Mostrar resultados
-        st.subheader(f"📊 Resultados: {len(df_filtered)} provisionamentos")
+        st.subheader(f"📋 Resultados: {len(df_filtered)} registros de vendedores")
         
         if not df_filtered.empty:
-            # Tabela principal
+            # Tabela principal agrupada
             st.dataframe(
                 df_filtered[[
-                    'tipo', 'grao', 'quantidade_total', 'quantidade_restante',
-                    'quantidade_utilizada', 'preco_saca', 'valor_total',
-                    'valor_restante', 'percentual_utilizado', 'usuario',
-                    'origem', 'destino', 'fob', 'data_criacao'
+                    'comprador', 'vendedor', 'tipo', 'grao', 'preco_saca',
+                    'quantidade_total_vendedor', 'quantidade_restante_vendedor', 
+                    'quantidade_utilizada_vendedor', 'valor_total_vendedor',
+                    'valor_restante_vendedor', 'taxa_utilizacao_vendedor',
+                    'data_criacao', 'fob'
                 ]],
-                use_container_width=True
+                use_container_width=True,
+                column_config={
+                    'comprador': 'Comprador',
+                    'vendedor': 'Vendedor',
+                    'tipo': 'Tipo',
+                    'grao': 'Grão',
+                    'preco_saca': st.column_config.NumberColumn('Preço/Saca', format="R$ %.2f"),
+                    'quantidade_total_vendedor': st.column_config.NumberColumn('Qtd Total', format="%.0f"),
+                    'quantidade_restante_vendedor': st.column_config.NumberColumn('Qtd Restante', format="%.0f"),
+                    'quantidade_utilizada_vendedor': st.column_config.NumberColumn('Qtd Utilizada', format="%.0f"),
+                    'valor_total_vendedor': st.column_config.NumberColumn('Valor Total', format="R$ %.2f"),
+                    'valor_restante_vendedor': st.column_config.NumberColumn('Valor Restante', format="R$ %.2f"),
+                    'taxa_utilizacao_vendedor': st.column_config.NumberColumn('Taxa Utilização', format="%.1f%%"),
+                    'data_criacao': 'Data Criação',
+                    'fob': 'FOB'
+                }
+            )
+            
+            # Resumo agregado por comprador e vendedor
+            st.subheader("📈 Resumo Agregado")
+            
+            # Agrupar por comprador e vendedor
+            summary = df_filtered.groupby(['comprador', 'vendedor']).agg({
+                'quantidade_total_vendedor': 'sum',
+                'quantidade_restante_vendedor': 'sum',
+                'quantidade_utilizada_vendedor': 'sum',
+                'valor_total_vendedor': 'sum',
+                'valor_restante_vendedor': 'sum'
+            }).reset_index()
+            
+            # Calcular taxa de utilização agregada
+            summary['taxa_utilizacao_agregada'] = (
+                summary['quantidade_utilizada_vendedor'] / summary['quantidade_total_vendedor'] * 100
+            ).fillna(0)
+            
+            st.dataframe(
+                summary,
+                use_container_width=True,
+                column_config={
+                    'comprador': 'Comprador',
+                    'vendedor': 'Vendedor',
+                    'quantidade_total_vendedor': st.column_config.NumberColumn('Total Sacas', format="%.0f"),
+                    'quantidade_restante_vendedor': st.column_config.NumberColumn('Sacas Restantes', format="%.0f"),
+                    'quantidade_utilizada_vendedor': st.column_config.NumberColumn('Sacas Utilizadas', format="%.0f"),
+                    'valor_total_vendedor': st.column_config.NumberColumn('Valor Total', format="R$ %.2f"),
+                    'valor_restante_vendedor': st.column_config.NumberColumn('Valor Restante', format="R$ %.2f"),
+                    'taxa_utilizacao_agregada': st.column_config.NumberColumn('Taxa Utilização', format="%.1f%%")
+                }
             )
             
             # Gráficos
             col1, col2 = st.columns(2)
             
             with col1:
-                st.subheader("📈 Utilização por Usuário")
+                st.subheader("📊 Top 10 Vendedores por Quantidade")
                 
-                # Agrupar por usuário
-                user_stats = df_filtered.groupby('usuario').agg({
-                    'quantidade_total': 'sum',
-                    'quantidade_utilizada': 'sum',
-                    'valor_total': 'sum'
+                # Agrupar por vendedor
+                vendor_stats = df_filtered.groupby('vendedor').agg({
+                    'quantidade_total_vendedor': 'sum',
+                    'quantidade_restante_vendedor': 'sum'
                 }).reset_index()
                 
-                user_stats['taxa_utilizacao'] = (
-                    user_stats['quantidade_utilizada'] / user_stats['quantidade_total'] * 100
-                ).fillna(0)
+                vendor_stats = vendor_stats.sort_values('quantidade_total_vendedor', ascending=False).head(10)
                 
-                if not user_stats.empty:
+                if not vendor_stats.empty:
                     fig = px.bar(
-                        user_stats.head(10),
-                        x='usuario',
-                        y='taxa_utilizacao',
-                        title="Taxa de Utilização por Usuário (%)",
-                        color='taxa_utilizacao',
-                        color_continuous_scale='RdYlGn'
+                        vendor_stats,
+                        x='vendedor',
+                        y=['quantidade_total_vendedor', 'quantidade_restante_vendedor'],
+                        title="Quantidade Total vs Restante por Vendedor",
+                        barmode='group'
                     )
                     fig.update_layout(xaxis_tickangle=45)
                     st.plotly_chart(fig, use_container_width=True)
             
             with col2:
-                st.subheader("🌾 Distribuição por Tipo de Grão")
+                st.subheader("💰 Top 10 Compradores por Valor")
                 
-                if 'grao' in df_filtered.columns:
-                    grain_stats = df_filtered[df_filtered['grao'] != ''].groupby('grao').agg({
-                        'quantidade_total': 'sum',
-                        'valor_total': 'sum'
-                    }).reset_index()
-                    
-                    if not grain_stats.empty:
-                        fig = px.pie(
-                            grain_stats,
-                            values='quantidade_total',
-                            names='grao',
-                            title="Distribuição de Quantidade por Grão"
-                        )
-                        st.plotly_chart(fig, use_container_width=True)
+                # Agrupar por comprador
+                buyer_stats = df_filtered.groupby('comprador').agg({
+                    'valor_total_vendedor': 'sum',
+                    'valor_restante_vendedor': 'sum'
+                }).reset_index()
+                
+                buyer_stats = buyer_stats.sort_values('valor_total_vendedor', ascending=False).head(10)
+                
+                if not buyer_stats.empty:
+                    fig = px.bar(
+                        buyer_stats,
+                        x='comprador',
+                        y=['valor_total_vendedor', 'valor_restante_vendedor'],
+                        title="Valor Total vs Restante por Comprador",
+                        barmode='group'
+                    )
+                    fig.update_layout(xaxis_tickangle=45)
+                    st.plotly_chart(fig, use_container_width=True)
             
             # Estatísticas resumidas
             st.subheader("📊 Estatísticas Resumidas")
@@ -170,19 +221,19 @@ def show_provisionamento_page():
             col1, col2, col3, col4 = st.columns(4)
             
             with col1:
-                total_qty_filtered = df_filtered['quantidade_total'].sum()
+                total_qty_filtered = df_filtered['quantidade_total_vendedor'].sum()
                 st.metric("📦 Quantidade Total", f"{total_qty_filtered:,.0f}")
             
             with col2:
-                total_remaining = df_filtered['quantidade_restante'].sum()
+                total_remaining = df_filtered['quantidade_restante_vendedor'].sum()
                 st.metric("📦 Quantidade Restante", f"{total_remaining:,.0f}")
             
             with col3:
-                total_value_filtered = df_filtered['valor_total'].sum()
+                total_value_filtered = df_filtered['valor_total_vendedor'].sum()
                 st.metric("💰 Valor Total", f"R$ {total_value_filtered:,.2f}")
             
             with col4:
-                avg_utilization = df_filtered['percentual_utilizado'].mean()
+                avg_utilization = df_filtered['taxa_utilizacao_vendedor'].mean()
                 st.metric("📊 Utilização Média", f"{avg_utilization:.1f}%")
         
         else:
@@ -190,60 +241,6 @@ def show_provisionamento_page():
     
     else:
         st.warning("Nenhum dado de provisionamento encontrado.")
-    
-    # Alertas de provisionamento
-    st.subheader("🚨 Alertas de Provisionamento")
-    
-    with st.spinner("Gerando alertas..."):
-        alertas = prov_service.get_alertas_provisionamento()
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Provisionamentos vencidos
-        vencidos = alertas.get('vencidos', [])
-        if vencidos:
-            st.markdown(f"""
-            <div class="alert-high">
-                <strong>🔴 Provisionamentos Vencidos</strong><br>
-                {len(vencidos)} provisionamentos passaram do prazo de entrega
-            </div>
-            """, unsafe_allow_html=True)
-            
-            with st.expander("Ver detalhes dos vencidos"):
-                for v in vencidos[:5]:
-                    st.write(f"**{v['usuario']}**: {v['quantidade_restante']:,.0f} sacas restantes")
-        
-        # Baixo estoque
-        baixo_estoque = alertas.get('baixo_estoque', [])
-        if baixo_estoque:
-            st.markdown(f"""
-            <div class="alert-medium">
-                <strong>⚠️ Baixo Estoque</strong><br>
-                {len(baixo_estoque)} provisionamentos com menos de 10% restante
-            </div>
-            """, unsafe_allow_html=True)
-    
-    with col2:
-        # Sem movimento
-        sem_movimento = alertas.get('sem_movimento', [])
-        if sem_movimento:
-            st.markdown(f"""
-            <div class="alert-medium">
-                <strong>📦 Sem Movimento</strong><br>
-                {len(sem_movimento)} provisionamentos sem utilização
-            </div>
-            """, unsafe_allow_html=True)
-        
-        # Preço alto
-        preco_alto = alertas.get('preco_alto', [])
-        if preco_alto:
-            st.markdown(f"""
-            <div class="alert-low">
-                <strong>💰 Preço Alto</strong><br>
-                {len(preco_alto)} provisionamentos com preço acima da média
-            </div>
-            """, unsafe_allow_html=True)
     
     db_config.close_connection()
 

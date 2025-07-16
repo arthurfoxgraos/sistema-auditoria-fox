@@ -296,6 +296,137 @@ class ProvisioningService:
             print(f"Erro ao agrupar por usuário: {e}")
             return pd.DataFrame()
     
+    def get_provisionings_with_sellers_unwind(self, limit: int = 1000) -> List[Dict]:
+        """Busca provisionamentos com unwind de sellersOrders e lookup de users"""
+        pipeline = [
+            # Unwind das sellersOrders para processar cada ordem individualmente
+            {"$unwind": "$sellersOrders"},
+            # Lookup com users para o comprador (user principal do provisionamento)
+            {
+                "$lookup": {
+                    "from": "users",
+                    "localField": "user",
+                    "foreignField": "_id",
+                    "as": "buyer_info"
+                }
+            },
+            # Lookup com users para o vendedor (sellersOrders.user)
+            {
+                "$lookup": {
+                    "from": "users",
+                    "localField": "sellersOrders.user",
+                    "foreignField": "_id",
+                    "as": "seller_info"
+                }
+            },
+            # Lookup com grains
+            {
+                "$lookup": {
+                    "from": "grains",
+                    "localField": "grain",
+                    "foreignField": "_id",
+                    "as": "grain_info"
+                }
+            },
+            # Adicionar campos calculados
+            {
+                "$addFields": {
+                    "buyer_name": {
+                        "$ifNull": [
+                            {"$arrayElemAt": ["$buyer_info.name", 0]},
+                            {"$arrayElemAt": ["$buyer_info.companyName", 0]}
+                        ]
+                    },
+                    "seller_name": {
+                        "$ifNull": [
+                            {"$arrayElemAt": ["$seller_info.name", 0]},
+                            {"$arrayElemAt": ["$seller_info.companyName", 0]}
+                        ]
+                    },
+                    "grain_name": {"$arrayElemAt": ["$grain_info.name", 0]},
+                    "seller_amount_remaining": "$sellersOrders.amountRemaining",
+                    "seller_amount_total": "$sellersOrders.amount",
+                    "seller_amount_used": {
+                        "$subtract": ["$sellersOrders.amount", "$sellersOrders.amountRemaining"]
+                    },
+                    "seller_value_remaining": {
+                        "$multiply": ["$sellersOrders.amountRemaining", "$bagPrice"]
+                    },
+                    "seller_value_total": {
+                        "$multiply": ["$sellersOrders.amount", "$bagPrice"]
+                    },
+                    "seller_utilization_rate": {
+                        "$cond": {
+                            "if": {"$gt": ["$sellersOrders.amount", 0]},
+                            "then": {
+                                "$multiply": [
+                                    {"$divide": [
+                                        {"$subtract": ["$sellersOrders.amount", "$sellersOrders.amountRemaining"]},
+                                        "$sellersOrders.amount"
+                                    ]},
+                                    100
+                                ]
+                            },
+                            "else": 0
+                        }
+                    },
+                    "provisioning_type": {
+                        "$cond": {
+                            "if": {"$eq": ["$isGrain", True]},
+                            "then": "🌾 Grão",
+                            "else": {
+                                "$cond": {
+                                    "if": {"$eq": ["$isFreight", True]},
+                                    "then": "🚛 Frete",
+                                    "else": "❓ Outro"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            {"$sort": {"createdAt": -1}},
+            {"$limit": limit}
+        ]
+        
+        try:
+            results = list(self.provisionings.aggregate(pipeline))
+            return results
+        except Exception as e:
+            print(f"Erro ao buscar provisionamentos com sellersOrders unwind: {e}")
+            return []
+    
+    def get_provisionings_grouped_dataframe(self, limit: int = 1000) -> pd.DataFrame:
+        """Retorna DataFrame agrupado por comprador e vendedor"""
+        provisionings_data = self.get_provisionings_with_sellers_unwind(limit)
+        
+        if not provisionings_data:
+            return pd.DataFrame()
+        
+        # Processar dados para DataFrame
+        processed_data = []
+        
+        for prov in provisionings_data:
+            processed_data.append({
+                'provisioning_id': str(prov.get('_id')),
+                'comprador': prov.get('buyer_name', 'N/A'),
+                'vendedor': prov.get('seller_name', 'N/A'),
+                'tipo': prov.get('provisioning_type', 'N/A'),
+                'grao': prov.get('grain_name', 'N/A'),
+                'preco_saca': prov.get('bagPrice', 0),
+                'quantidade_total_vendedor': prov.get('seller_amount_total', 0),
+                'quantidade_restante_vendedor': prov.get('seller_amount_remaining', 0),
+                'quantidade_utilizada_vendedor': prov.get('seller_amount_used', 0),
+                'valor_total_vendedor': prov.get('seller_value_total', 0),
+                'valor_restante_vendedor': prov.get('seller_value_remaining', 0),
+                'taxa_utilizacao_vendedor': prov.get('seller_utilization_rate', 0),
+                'data_criacao': prov.get('createdAt'),
+                'prazo_entrega': prov.get('deliveryDeadline'),
+                'fob': 'Sim' if prov.get('isFob') else 'Não'
+            })
+        
+        return pd.DataFrame(processed_data)
+    
     def get_alertas_provisionamento(self) -> Dict[str, List]:
         """Gera alertas para provisionamentos"""
         alertas = {
