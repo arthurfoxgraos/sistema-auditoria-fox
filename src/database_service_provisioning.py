@@ -428,16 +428,19 @@ class ProvisioningService:
         return pd.DataFrame(processed_data)
     
     def get_simple_provisionings_table(self) -> pd.DataFrame:
-        """Retorna DataFrame simples com comprador, vendedor e amount conforme consulta específica"""
+        """Retorna DataFrame simples com comprador, vendedor, destinationOrder, originOrder, amount e grain"""
         pipeline = [
             # Unwind das sellersOrders
             {"$unwind": "$sellersOrders"},
-            # Projetar apenas os campos necessários
+            # Projetar os campos conforme nova especificação
             {
                 "$project": {
                     "comprador": "$user",
-                    "vendedor": "$sellersOrders.user", 
-                    "amount": "$sellersOrders.amountRemaining"
+                    "vendedor": "$sellersOrders.user",
+                    "destinationOrder": "$_id",
+                    "originOrder": "$sellersOrders._id",
+                    "amount": "$sellersOrders.amountRemaining",
+                    "grain": 1
                 }
             }
         ]
@@ -454,7 +457,10 @@ class ProvisioningService:
                 data.append({
                     'comprador': str(result.get('comprador', 'N/A')),
                     'vendedor': str(result.get('vendedor', 'N/A')),
-                    'amount': result.get('amount', 0)
+                    'destinationOrder': str(result.get('destinationOrder', 'N/A')),
+                    'originOrder': str(result.get('originOrder', 'N/A')),
+                    'amount': result.get('amount', 0),
+                    'grain': str(result.get('grain', 'N/A'))
                 })
             
             return pd.DataFrame(data)

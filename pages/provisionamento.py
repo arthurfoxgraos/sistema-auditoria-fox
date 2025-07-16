@@ -32,8 +32,11 @@ def show_provisionamento_page():
             use_container_width=True,
             column_config={
                 'comprador': 'Comprador',
-                'vendedor': 'Vendedor', 
-                'amount': st.column_config.NumberColumn('Amount Remaining', format="%.0f")
+                'vendedor': 'Vendedor',
+                'destinationOrder': 'Destination Order',
+                'originOrder': 'Origin Order', 
+                'amount': st.column_config.NumberColumn('Amount Remaining', format="%.0f"),
+                'grain': 'Grain'
             }
         )
         
