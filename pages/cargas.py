@@ -247,35 +247,47 @@ def show_cargas_page():
         # Exibir totalizadores em métricas
         col1, col2, col3, col4, col5 = st.columns(5)
         
+        # Calcular valores médios por saca
+        avg_revenue_per_bag = (total_revenue / total_bags) if total_bags > 0 else 0
+        avg_cost_per_bag = (total_cost / total_bags) if total_bags > 0 else 0
+        avg_freight_per_bag = (total_freight / total_bags) if total_bags > 0 else 0
+        avg_profit_per_bag = (total_gross_profit / total_bags) if total_bags > 0 else 0
+        
         with col1:
             st.metric(
                 label="💰 Receita Total",
-                value=f"R$ {total_revenue:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+                value=f"R$ {total_revenue:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'),
+                delta=f"R$ {avg_revenue_per_bag:.2f}/saca".replace('.', ',') if total_bags > 0 else None
             )
         
         with col2:
             st.metric(
                 label="💸 Custo Total", 
-                value=f"R$ {total_cost:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+                value=f"R$ {total_cost:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'),
+                delta=f"R$ {avg_cost_per_bag:.2f}/saca".replace('.', ',') if total_bags > 0 else None
             )
         
         with col3:
             st.metric(
                 label="🚛 Frete Total",
-                value=f"R$ {total_freight:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+                value=f"R$ {total_freight:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'),
+                delta=f"R$ {avg_freight_per_bag:.2f}/saca".replace('.', ',') if total_bags > 0 else None
             )
         
         with col4:
             st.metric(
                 label="📈 Lucro Bruto Total",
                 value=f"R$ {total_gross_profit:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'),
-                delta=f"{((total_gross_profit / total_revenue * 100) if total_revenue > 0 else 0):.1f}%" if total_revenue > 0 else None
+                delta=f"R$ {avg_profit_per_bag:.2f}/saca".replace('.', ',') if total_bags > 0 else None
             )
         
         with col5:
+            # Calcular margem de lucro percentual
+            profit_margin = ((total_gross_profit / total_revenue * 100) if total_revenue > 0 else 0)
             st.metric(
                 label="📦 Total Sacas",
-                value=f"{total_bags:,.0f}".replace(',', '.')
+                value=f"{total_bags:,.0f}".replace(',', '.'),
+                delta=f"{profit_margin:.1f}% margem" if total_revenue > 0 else None
             )
         
         st.divider()
