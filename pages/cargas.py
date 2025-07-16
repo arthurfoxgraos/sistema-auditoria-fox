@@ -83,6 +83,15 @@ def show_cargas_page():
     # Filtros
     st.subheader("🔍 Filtros")
     
+    # Campo de pesquisa por ticket (destaque no topo)
+    ticket_search = st.text_input(
+        "🎫 Pesquisar por Número de Ticket:",
+        placeholder="Digite o número do ticket...",
+        help="Pesquise por número específico de ticket"
+    )
+    
+    st.divider()
+    
     # Primeira linha de filtros (4 colunas)
     col1, col2, col3, col4 = st.columns(4)
     
@@ -189,6 +198,13 @@ def show_cargas_page():
     
     # Aplicar filtros
     df_filtered = df_tickets.copy()
+    
+    # Filtro por número de ticket
+    if ticket_search:
+        # Converter para string e filtrar por contém (case insensitive)
+        df_filtered = df_filtered[
+            df_filtered['ticket'].astype(str).str.contains(str(ticket_search), case=False, na=False)
+        ]
     
     # Filtro por status
     if status_filter != "Todos" and 'status' in df_filtered.columns:
