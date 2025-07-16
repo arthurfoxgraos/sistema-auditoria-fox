@@ -427,6 +427,42 @@ class ProvisioningService:
         
         return pd.DataFrame(processed_data)
     
+    def get_simple_provisionings_table(self) -> pd.DataFrame:
+        """Retorna DataFrame simples com comprador, vendedor e amount conforme consulta específica"""
+        pipeline = [
+            # Unwind das sellersOrders
+            {"$unwind": "$sellersOrders"},
+            # Projetar apenas os campos necessários
+            {
+                "$project": {
+                    "comprador": "$user",
+                    "vendedor": "$sellersOrders.user", 
+                    "amount": "$sellersOrders.amountRemaining"
+                }
+            }
+        ]
+        
+        try:
+            results = list(self.provisionings.aggregate(pipeline))
+            
+            if not results:
+                return pd.DataFrame()
+            
+            # Converter para DataFrame
+            data = []
+            for result in results:
+                data.append({
+                    'comprador': str(result.get('comprador', 'N/A')),
+                    'vendedor': str(result.get('vendedor', 'N/A')),
+                    'amount': result.get('amount', 0)
+                })
+            
+            return pd.DataFrame(data)
+            
+        except Exception as e:
+            print(f"Erro ao buscar provisionamentos simples: {e}")
+            return pd.DataFrame()
+    
     def get_alertas_provisionamento(self) -> Dict[str, List]:
         """Gera alertas para provisionamentos"""
         alertas = {
