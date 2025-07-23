@@ -358,11 +358,12 @@ class DatabaseService:
             # Filtro apenas por isIgnored (removendo filtro de ano temporariamente)
             {
                 "$match": {
-                    "$or": [
-                        {"isIgnored": {"$exists": False}},
-                        {"isIgnored": None},
-                        {"isIgnored": False}
-                    ]
+                    "isFuturo": {
+                        "$ne": True,
+                    },
+                    "isIgnored": {
+                        "$ne": True
+                    }
                 }
             },
             # Lookup com finances_categories
@@ -420,10 +421,7 @@ class DatabaseService:
             },
             {"$sort": {"date": -1}}
         ]
-        
-        # Adicionar limite apenas se especificado
-        if limit:
-            pipeline.append({"$limit": limit})
+    
         
         try:
             results = list(self.finances.aggregate(pipeline))
