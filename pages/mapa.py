@@ -72,9 +72,11 @@ def show_mapa_page():
                 st.metric("📍 Total de Endereços", len(addresses))
             
             with col2:
-                # Contar endereços com coordenadas
+                # Contar endereços com coordenadas (usando campo location)
                 with_coords = sum(1 for addr in addresses 
-                                if addr.get('latitude') and addr.get('longitude'))
+                                if addr.get('location') and 
+                                   addr.get('location', {}).get('latitude') and 
+                                   addr.get('location', {}).get('longitude'))
                 st.metric("🎯 Com Coordenadas", with_coords)
             
             with col3:
@@ -89,11 +91,12 @@ def show_mapa_page():
             center_lat = -14.2350
             center_lon = -51.9253
             
-            # Verificar se há endereços com coordenadas válidas
+            # Verificar se há endereços com coordenadas válidas (usando campo location)
             valid_addresses = []
             for addr in addresses:
-                lat = addr.get('latitude')
-                lon = addr.get('longitude')
+                location = addr.get('location', {})
+                lat = location.get('latitude')
+                lon = location.get('longitude')
                 
                 # Verificar se as coordenadas são válidas
                 if lat and lon:
@@ -205,6 +208,7 @@ def show_mapa_page():
             # Preparar dados para exibição
             display_data = []
             for addr in addresses:
+                location = addr.get('location', {})
                 display_data.append({
                     'Nome': addr.get('name', addr.get('title', 'N/A')),
                     'Endereço': addr.get('address', 'N/A'),
@@ -214,8 +218,8 @@ def show_mapa_page():
                     'Tipo': addr.get('type', 'N/A'),
                     'Telefone': addr.get('phone', 'N/A'),
                     'Email': addr.get('email', 'N/A'),
-                    'Latitude': addr.get('latitude', 'N/A'),
-                    'Longitude': addr.get('longitude', 'N/A')
+                    'Latitude': location.get('latitude', 'N/A'),
+                    'Longitude': location.get('longitude', 'N/A')
                 })
             
             df_display = pd.DataFrame(display_data)
