@@ -3,13 +3,39 @@ Página de Mapa - Sistema de Auditoria FOX
 """
 import streamlit as st
 import pandas as pd
-import folium
-from streamlit_folium import st_folium
 from config.database import get_database_connection
+
+# Import condicional do folium
+try:
+    import folium
+    from streamlit_folium import st_folium
+    FOLIUM_AVAILABLE = True
+except ImportError:
+    FOLIUM_AVAILABLE = False
 
 def show_mapa_page():
     """Mostra página de mapa com endereços da Fox"""
     st.header("🗺️ Mapa de Endereços Fox")
+    
+    # Verificar se folium está disponível
+    if not FOLIUM_AVAILABLE:
+        st.error("❌ **Dependências de mapa não instaladas**")
+        st.markdown("""
+        Para usar a funcionalidade de mapa, você precisa instalar as dependências necessárias:
+        
+        ```bash
+        pip install folium streamlit-folium
+        ```
+        
+        Ou instale todas as dependências do projeto:
+        
+        ```bash
+        pip install -r requirements.txt
+        ```
+        
+        Após a instalação, reinicie a aplicação.
+        """)
+        return
     
     # Obter dados de endereços
     db_config = get_database_connection()
