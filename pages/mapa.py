@@ -72,11 +72,11 @@ def show_mapa_page():
                 st.metric("📍 Total de Endereços", len(addresses))
             
             with col2:
-                # Contar endereços com coordenadas (usando campo location)
+                # Contar endereços com coordenadas (usando campo location.coordinates)
                 with_coords = sum(1 for addr in addresses 
                                 if addr.get('location') and 
-                                   addr.get('location', {}).get('latitude') and 
-                                   addr.get('location', {}).get('longitude'))
+                                   addr.get('location', {}).get('coordinates') and
+                                   len(addr.get('location', {}).get('coordinates', [])) >= 2)
                 st.metric("🎯 Com Coordenadas", with_coords)
             
             with col3:
@@ -91,25 +91,24 @@ def show_mapa_page():
             center_lat = -14.2350
             center_lon = -51.9253
             
-            # Verificar se há endereços com coordenadas válidas (usando campo location)
+            # Verificar se há endereços com coordenadas válidas (usando campo location.coordinates)
             valid_addresses = []
             for addr in addresses:
                 location = addr.get('location', {})
-                lat = location.get('latitude')
-                lon = location.get('longitude')
+                coordinates = location.get('coordinates', [])
                 
-                # Verificar se as coordenadas são válidas
-                if lat and lon:
+                # Verificar se as coordenadas são válidas (formato GeoJSON: [longitude, latitude])
+                if coordinates and len(coordinates) >= 2:
                     try:
-                        lat_float = float(lat)
-                        lon_float = float(lon)
+                        lon_float = float(coordinates[0])  # longitude
+                        lat_float = float(coordinates[1])  # latitude
                         if -90 <= lat_float <= 90 and -180 <= lon_float <= 180:
                             valid_addresses.append({
                                 **addr,
                                 'lat': lat_float,
                                 'lon': lon_float
                             })
-                    except (ValueError, TypeError):
+                    except (ValueError, TypeError, IndexError):
                         continue
             
             if valid_addresses:
@@ -209,6 +208,12 @@ def show_mapa_page():
             display_data = []
             for addr in addresses:
                 location = addr.get('location', {})
+                coordinates = location.get('coordinates', [])
+                
+                # Extrair latitude e longitude do array coordinates (formato GeoJSON)
+                latitude = coordinates[1] if len(coordinates) >= 2 else 'N/A'
+                longitude = coordinates[0] if len(coordinates) >= 2 else 'N/A'
+                
                 display_data.append({
                     'Nome': addr.get('name', addr.get('title', 'N/A')),
                     'Endereço': addr.get('address', 'N/A'),
@@ -218,8 +223,8 @@ def show_mapa_page():
                     'Tipo': addr.get('type', 'N/A'),
                     'Telefone': addr.get('phone', 'N/A'),
                     'Email': addr.get('email', 'N/A'),
-                    'Latitude': location.get('latitude', 'N/A'),
-                    'Longitude': location.get('longitude', 'N/A')
+                    'Latitude': latitude,
+                    'Longitude': longitude
                 })
             
             df_display = pd.DataFrame(display_data)
