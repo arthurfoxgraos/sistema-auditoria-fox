@@ -47,14 +47,15 @@ class DatabaseConfig:
             'provisionings': self.db['provisionings'],
             'grains': self.db['grains'],
             'finances': self.db['finances'],
-            'finances_categories': self.db['finances_categories']
+            'finances_categories': self.db['finances_categories'],
+            'addresses': self.db['addresses']
         }
         
         return collections
     
     def test_collections(self):
         """Testa se as coleções existem e têm dados"""
-        collections_to_test = ['ticketv2', 'ticketv2_transactions', 'orderv2', 'users', 'provisionings']
+        collections_to_test = ['ticketv2', 'ticketv2_transactions', 'orderv2', 'users', 'provisionings', 'addresses']
         results = {}
         
         for collection_name in collections_to_test:
