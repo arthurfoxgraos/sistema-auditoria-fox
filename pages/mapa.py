@@ -49,7 +49,7 @@ def show_mapa_page():
     with st.spinner("Carregando endereços..."):
         try:
             addresses_collection = collections.get('addresses')
-            if not addresses_collection:
+            if addresses_collection is None:
                 st.error("❌ Coleção 'addresses' não encontrada")
                 db_config.close_connection()
                 return
