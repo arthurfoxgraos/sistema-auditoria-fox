@@ -120,7 +120,8 @@ def main():
             "🚚 Cargas",
             "📦 Provisionamento",
             "💰 Financeiro",
-            "📋 Contratos"
+            "📋 Contratos",
+            "🗺️ Mapa"
         ]
     )
     
@@ -137,6 +138,9 @@ def main():
     elif page == "📋 Contratos":
         from pages.contratos import show_contratos_page
         show_contratos_page()
+    elif page == "🗺️ Mapa":
+        from pages.mapa import show_mapa_page
+        show_mapa_page()
 
 if __name__ == "__main__":
     main()
