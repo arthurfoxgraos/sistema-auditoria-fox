@@ -48,7 +48,8 @@ class DatabaseConfig:
             'grains': self.db['grains'],
             'finances': self.db['finances'],
             'finances_categories': self.db['finances_categories'],
-            'addresses': self.db['addresses']
+            'addresses': self.db['addresses'],
+            'cities': self.db['cities']
         }
         
         return collections

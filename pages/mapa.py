@@ -8,10 +8,71 @@ from config.database import get_database_connection
 # Import condicional do folium
 try:
     import folium
+    from folium.plugins import MarkerCluster
     from streamlit_folium import st_folium
     FOLIUM_AVAILABLE = True
 except ImportError:
     FOLIUM_AVAILABLE = False
+
+def get_addresses_with_cities(collections):
+    """Busca endereços com lookup de cities para melhor performance"""
+    try:
+        addresses_collection = collections.get('addresses')
+        if addresses_collection is None:
+            return None
+        
+        # Pipeline de agregação com lookup de cities
+        pipeline = [
+            # Lookup com cities
+            {
+                "$lookup": {
+                    "from": "cities",
+                    "localField": "city",
+                    "foreignField": "_id",
+                    "as": "city_info"
+                }
+            },
+            # Adicionar campos calculados
+            {
+                "$addFields": {
+                    "city_name": {"$arrayElemAt": ["$city_info.name", 0]},
+                    "state_name": {"$arrayElemAt": ["$city_info.state", 0]},
+                    "has_coordinates": {
+                        "$and": [
+                            {"$ne": ["$location", None]},
+                            {"$ne": ["$location.coordinates", None]},
+                            {"$gte": [{"$size": {"$ifNull": ["$location.coordinates", []]}}, 2]}
+                        ]
+                    }
+                }
+            },
+            # Projetar apenas campos necessários
+            {
+                "$project": {
+                    "name": 1,
+                    "type": 1,
+                    "address": 1,
+                    "city_name": 1,
+                    "state_name": 1,
+                    "zipCode": 1,
+                    "phone": 1,
+                    "email": 1,
+                    "location": 1,
+                    "has_coordinates": 1,
+                    "isActive": 1,
+                    "createdAt": 1,
+                    "updatedAt": 1
+                }
+            }
+        ]
+        
+        # Executar agregação
+        addresses = list(addresses_collection.aggregate(pipeline))
+        return addresses
+        
+    except Exception as e:
+        st.error(f"❌ Erro na consulta de endereços: {str(e)}")
+        return None
 
 def show_mapa_page():
     """Mostra página de mapa com endereços da Fox"""
@@ -45,17 +106,16 @@ def show_mapa_page():
     
     collections = db_config.get_collections()
     
-    # Buscar endereços na coleção addresses
+    # Buscar endereços na coleção addresses com lookup de cities
     with st.spinner("Carregando endereços..."):
         try:
-            addresses_collection = collections.get('addresses')
-            if addresses_collection is None:
+            # Usar função otimizada com lookup
+            addresses = get_addresses_with_cities(collections)
+            
+            if addresses is None:
                 st.error("❌ Coleção 'addresses' não encontrada")
                 db_config.close_connection()
                 return
-            
-            # Buscar todos os endereços
-            addresses = list(addresses_collection.find({}))
             
             if not addresses:
                 st.warning("⚠️ Nenhum endereço encontrado na base de dados")
@@ -72,11 +132,8 @@ def show_mapa_page():
                 st.metric("📍 Total de Endereços", len(addresses))
             
             with col2:
-                # Contar endereços com coordenadas (usando campo location.coordinates)
-                with_coords = sum(1 for addr in addresses 
-                                if addr.get('location') and 
-                                   addr.get('location', {}).get('coordinates') and
-                                   len(addr.get('location', {}).get('coordinates', [])) >= 2)
+                # Contar endereços com coordenadas (usando campo calculado)
+                with_coords = sum(1 for addr in addresses if addr.get('has_coordinates', False))
                 st.metric("🎯 Com Coordenadas", with_coords)
             
             with col3:
@@ -91,14 +148,15 @@ def show_mapa_page():
             center_lat = -14.2350
             center_lon = -51.9253
             
-            # Verificar se há endereços com coordenadas válidas (usando campo location.coordinates)
+            # Filtrar endereços com coordenadas válidas (otimizado)
             valid_addresses = []
             for addr in addresses:
-                location = addr.get('location', {})
-                coordinates = location.get('coordinates', [])
-                
-                # Verificar se as coordenadas são válidas (formato GeoJSON: [longitude, latitude])
-                if coordinates and len(coordinates) >= 2:
+                # Usar campo calculado para performance
+                if not addr.get('has_coordinates', False):
+                    continue
+                    
+                coordinates = addr.get('location', {}).get('coordinates', [])
+                if len(coordinates) >= 2:
                     try:
                         lon_float = float(coordinates[0])  # longitude
                         lat_float = float(coordinates[1])  # latitude
@@ -118,14 +176,22 @@ def show_mapa_page():
                 center_lat = avg_lat
                 center_lon = avg_lon
                 
-                # Criar mapa Folium
+                # Criar mapa Folium com clusterização
                 m = folium.Map(
                     location=[center_lat, center_lon],
                     zoom_start=6,
                     tiles='OpenStreetMap'
                 )
                 
-                # Adicionar marcadores para cada endereço
+                # Criar cluster de marcadores para melhor performance
+                marker_cluster = MarkerCluster(
+                    name="Endereços Fox",
+                    overlay=True,
+                    control=True,
+                    icon_create_function=None
+                ).add_to(m)
+                
+                # Adicionar marcadores clusterizados
                 for addr in valid_addresses:
                     # Preparar informações do popup
                     popup_info = []
@@ -138,13 +204,13 @@ def show_mapa_page():
                     if addr.get('address'):
                         popup_info.append(f"📍 {addr['address']}")
                     
-                    # Cidade/Estado
-                    city = addr.get('city', '')
-                    state = addr.get('state', '')
-                    if city or state:
-                        location = f"{city}, {state}".strip(', ')
-                        if location:
-                            popup_info.append(f"🏙️ {location}")
+                    # Cidade/Estado (usando dados do lookup)
+                    city_name = addr.get('city_name', '')
+                    state_name = addr.get('state_name', '')
+                    if city_name or state_name:
+                        location_str = f"{city_name}, {state_name}".strip(', ')
+                        if location_str:
+                            popup_info.append(f"🏙️ {location_str}")
                     
                     # CEP
                     if addr.get('zipCode'):
@@ -173,16 +239,16 @@ def show_mapa_page():
                             icon_color = 'red'
                         elif 'filial' in type_lower:
                             icon_color = 'green'
-                        elif 'armazem' in type_lower or 'deposito' in type_lower:
+                        elif 'armazem' in type_lower or 'deposito' in type_lower or 'industria' in type_lower:
                             icon_color = 'orange'
                     
-                    # Adicionar marcador
+                    # Adicionar marcador ao cluster
                     folium.Marker(
                         location=[addr['lat'], addr['lon']],
                         popup=folium.Popup(popup_html, max_width=300),
                         tooltip=name,
                         icon=folium.Icon(color=icon_color, icon='building', prefix='fa')
-                    ).add_to(m)
+                    ).add_to(marker_cluster)
                 
                 # Exibir mapa
                 map_data = st_folium(m, width=700, height=500)
@@ -204,11 +270,10 @@ def show_mapa_page():
             # Tabela de endereços
             st.subheader("📋 Lista de Endereços")
             
-            # Preparar dados para exibição
+            # Preparar dados para exibição (usando dados do lookup)
             display_data = []
             for addr in addresses:
-                location = addr.get('location', {})
-                coordinates = location.get('coordinates', [])
+                coordinates = addr.get('location', {}).get('coordinates', [])
                 
                 # Extrair latitude e longitude do array coordinates (formato GeoJSON)
                 latitude = coordinates[1] if len(coordinates) >= 2 else 'N/A'
@@ -217,14 +282,15 @@ def show_mapa_page():
                 display_data.append({
                     'Nome': addr.get('name', addr.get('title', 'N/A')),
                     'Endereço': addr.get('address', 'N/A'),
-                    'Cidade': addr.get('city', 'N/A'),
-                    'Estado': addr.get('state', 'N/A'),
+                    'Cidade': addr.get('city_name', 'N/A'),  # Usando lookup
+                    'Estado': addr.get('state_name', 'N/A'),  # Usando lookup
                     'CEP': addr.get('zipCode', 'N/A'),
                     'Tipo': addr.get('type', 'N/A'),
                     'Telefone': addr.get('phone', 'N/A'),
                     'Email': addr.get('email', 'N/A'),
                     'Latitude': latitude,
-                    'Longitude': longitude
+                    'Longitude': longitude,
+                    'Com Coordenadas': 'Sim' if addr.get('has_coordinates', False) else 'Não'
                 })
             
             df_display = pd.DataFrame(display_data)
@@ -243,7 +309,8 @@ def show_mapa_page():
                     'Telefone': 'Telefone',
                     'Email': 'Email',
                     'Latitude': st.column_config.NumberColumn('Latitude', format="%.6f"),
-                    'Longitude': st.column_config.NumberColumn('Longitude', format="%.6f")
+                    'Longitude': st.column_config.NumberColumn('Longitude', format="%.6f"),
+                    'Com Coordenadas': 'Tem Coordenadas'
                 }
             )
             
